@@ -160,10 +160,10 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
     np.save(op.join(results_folder, 'cv_rd_to_mp_scores.npy'), cv_rd_to_mp_scores)
     np.save(op.join(results_folder, 'cv_rd_to_or_scores.npy'), cv_rd_to_or_scores)
 
-    all_cv_rd_to_rd_scores.append(cv_rd_to_rd_scores)
-    all_cv_rd_to_mm_scores.append(cv_rd_to_mm_scores)
-    all_cv_rd_to_mp_scores.append(cv_rd_to_mp_scores)
-    all_cv_rd_to_or_scores.append(cv_rd_to_or_scores)
+    all_cv_rd_to_rd_scores.append(cv_rd_to_rd_scores.mean(0))
+    all_cv_rd_to_mm_scores.append(cv_rd_to_mm_scores.mean(0))
+    all_cv_rd_to_mp_scores.append(cv_rd_to_mp_scores.mean(0))
+    all_cv_rd_to_or_scores.append(cv_rd_to_or_scores.mean(0))
 # create arrays with non cross-validated scores
 all_rd_to_mm_scores = np.array(all_rd_to_mm_scores)
 all_rd_to_mp_scores = np.array(all_rd_to_mp_scores)
