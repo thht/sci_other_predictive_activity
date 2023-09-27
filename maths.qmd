@@ -1,0 +1,90 @@
+---
+title: "maths"
+format: pdf
+---
+
+The purpose here is to derive mathematically the expected performance of a decoder on pre-stimulus data in a ordered sequence of stimuli such as implemented in Demarchi et al. 2019.
+
+# Under null hypothesis
+
+We assume the null hypothesis is true: there is only sensory but no predictive/anticipatory activity.
+
+Let $p$ be the probability the decoder finds the correct input. We assume $p_A = p_B = p_C = p_D$, i.e. the decoder performs equally on all stimuli types. $p$ is the *sensitivity* of the classifier.
+
+Based on the transition matrix of the ordered sequenece in Demarchi et al. 2019, we consider the following pairs of consecutive stimuli and their occurrence rates :
+
+| $S_{-1}$ | $S_0$ | occurrence rate |
+| :---: | :---: | :--- |
+| A | A | 0.25 |
+| B | A | 0 |
+| C | A | 0 |
+| D | A | 0.75 |
+
+## Equiprobable errors
+
+We further assume that when the classifier fails, it might return any other class with equal probability, i.e.  
+$$\forall Y \neq X, p(Y|X) = \frac{1-p}{3}$$
+
+
+### Testing on $S_{-1}$
+
+Then for any $S_0$, the probability that a decoder tested on $S_{-1}$ finds the identity of $S_0$ in the ordered sequence is:  
+$$p(Y=S_0|X=S_0) = \frac{1}{4} p(S_0|S_{-1}=S_0) + \frac{3}{4} p(S_0|S_{-1} \neq S_0) = \frac{1}{4} p + \frac{3}{4} \frac{1-p}{3} = \frac{1}{4}$$
+
+In conclusion, under the assumption of equiprobable errors, the performance of the decoder tested on the previous trial is **at chance level**.
+
+### Testing on $S_{-2}$
+
+We can extend the same reasoning to testing on $S_{-2}$:  
+$$p(Y=S_0|X=S_0) = \frac{1}{16} p(S_0|S_{-2}=S_0) + \frac{15}{16} p(S_0|S_{-2} \neq S_0) = \frac{1}{16} p + \frac{5}{16} \frac{1-p}{3} = \frac{5-4p}{16}$$
+
+Considering that $p > \frac{1}{4}$, the latter quantity is necessarily smaller than $\frac{1}{4}$, i.e. the decoder performs **below chance level**.
+
+
+## Non-equiprobable misses
+
+In practice, we might expect pairs of stimuli to be more often confounded if they are physically close:  
+$$p(B|A) > p(C|A) > p(D|A)$$
+
+A complete confounding matrix can be obtained at any latency from training and testing on random sequences. Here, for convenience, we parametrize the 3 possible error rates as having a geometric relationship:  
+$$p(B|A) = k p(C|A) = k^2 p(D|A)$$ where $k > 1$
+
+We can extend this logic to all others $X$ and $p(Y \neq X|X)$, with the additional constraint that:  
+$$\sum_{Y \neq X} p(Y|X) = 1-p$$
+
+An example of a plausible confounding matrix with $p=0.35$ (based on fig.2a in Demarchi et al. 2019) and $k = 2$:  
+$$\begin{matrix}
+   .35 & .372 & .186 & .093 \\
+   .26 & .35 & .26 & .13 \\
+   .13 & .26 & .35 & .26 \\
+   .093 & .186 & .372 & .35 \\
+\end{matrix}$$
+
+However, this confusion matrix is not plausible as we end up with some error rates being larger than the true positive rate (.372 vs. .35). Let us try with $k = 1.5$:
+$$\begin{matrix}
+   .35 & .308 & .205 & .137 \\
+   .244 & .35 & .244 & .163 \\
+   .163 & .244 & .35 & .244 \\
+   .137 & .205 & .308 & .35 \\
+\end{matrix}$$
+
+Using this.35+3.08 confusion matrix and the transition matrix, we can now calculate the probability that a decoder tested on $S_{-1}$ finds the identity of $S_0$ in the ordered sequence: 
+
+$$p(Y=S_0|X=S_0)
+= \sum_{x \in X} p(Y=x|x)
+= \frac{1}{4} ( (\frac{1}{4} p + \frac{3}{4} .137) + 3 (\frac{1}{4} p + \frac{3}{4} .244) )
+= \frac{1}{4} p + \frac{3*.137+9*.244}{16}
+= .2504$$
+
+While the accuracy is now **above chance level**, it remains largely under the accuracy reported by Demarchi et al. 2019 (fig. 3) which is between .255 and .26.
+
+The unbalance can be made a little more dramatic with $k = 1.7$:
+Let us try with $k = 1.5$:
+$$\begin{matrix}
+   .35 & .336 & .198 & .116 \\
+   .251 & .35 & .251 & .148 \\
+   .148 & .251 & .35 & .251 \\
+   .116 & .198 & .336 & .35 \\
+\end{matrix}$$
+
+But even under the unfavourable conditions, the accuracy is still only .204. 
