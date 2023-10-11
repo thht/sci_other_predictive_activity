@@ -93,26 +93,6 @@ for meg_rd, meg_or in zip(MEG_rds, MEG_ors):
         else:
             pass
     events_rerd = np.array(events_rerd)
-    
-    # reorder random raw (juste testing without reordering but cutting the same way)
-    random_events = yrd.copy()
-    ordered_events = list(yor)
-    raw_Xrd = raw_rd.get_data()
-    events_rerd = list()  # the reordered events (based on yor)
-    raw_Xrerd = list()  # the reordered X (based on yor)
-    new_sample = 0  # keep track of the current sample to create the reordered events
-    raw_Xrerd = raw_Xrd[:, :200]  # start the reorderd random with 2 first seconds of the random raw 
-    new_sample+=200
-    for event in tqdm(random_events):
-        if event[2] in random_events[:, 2]:
-            index = random_events[:, 2].tolist().index(event[2])
-            raw_Xrerd = np.concatenate((raw_Xrerd, raw_Xrd[:, random_events[index, 0]:random_events[index, 0]+33]), axis=1)
-            random_events = np.delete(random_events, index, axis=0)
-            events_rerd.append([new_sample, 0, event[2]])
-            new_sample+=33
-        else:
-            pass
-    events_rerd = np.array(events_rerd)
 
 
     # create an epoch from the reordered raw random
