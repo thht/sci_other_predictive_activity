@@ -1,3 +1,4 @@
+from base import gat_stats
 import os.path as op
 import os
 import numpy as np
@@ -114,7 +115,7 @@ for meg_rd, meg_or in zip(MEG_rds, MEG_ors):
                              event_id=[1, 2, 3, 4],
                              tmin=tmin, tmax=tmax, baseline=None, preload=True)
     # keep same trials in epochs_rd and epochs_rerd
-    epochs_rd = epochs_rd[orig_nums]
+    epochs_rd = epochs_rd[np.sort(orig_nums)]
     # keep only the same number of trials in ordered
     epochs_or = epochs_or[:len(epochs_rd)]
     # get the X and Y for each condition in numpy array
@@ -139,7 +140,7 @@ for meg_rd, meg_or in zip(MEG_rds, MEG_ors):
         cv_rd_to_rd_score = clf.score(Xrd[test_rd], yrd[test_rd])
         cv_rd_to_or_score = clf.score(Xor[test_rd], yor[test_rd])
         test_rerd = np.isin(orig_nums, test_rd)  # why sum(test_rerd) != len(test_rd) 
-        cv_rd_to_rerd_score = clf.score(Xrerd[test_rerd], yor[test_rerd])
+        cv_rd_to_rerd_score = clf.score(Xrerd[test_rerd], yrerd[test_rerd])
         cv_rd_to_rd_scores.append(cv_rd_to_rd_score)
         cv_rd_to_or_scores.append(cv_rd_to_or_score)
         cv_rd_to_rerd_scores.append(cv_rd_to_rerd_score)
@@ -161,8 +162,65 @@ all_cv_rd_to_or_scores = np.array(all_cv_rd_to_or_scores)
 all_cv_rd_to_rerd_scores = np.array(all_cv_rd_to_rerd_scores)
 
 plt.figure()
-plt.matshow(all_cv_rd_to_rd_scores.mean(0), origin='lower', extent=[tmin, tmax, tmin, tmax], vmin=0.23, vmax=0.27)
 plt.figure()
 plt.matshow(all_cv_rd_to_or_scores.mean(0), origin='lower', extent=[tmin, tmax, tmin, tmax], vmin=0.23, vmax=0.27)
 plt.figure()
 plt.matshow(all_cv_rd_to_rerd_scores.mean(0), origin='lower', extent=[tmin, tmax, tmin, tmax], vmin=0.23, vmax=0.27)
+
+# plot random to random
+plt.matshow(all_cv_rd_to_rd_scores.mean(0), origin='lower', extent=[tmin, tmax, tmin, tmax], vmin=0.23, vmax=0.27)
+times = epochs_or.times
+pval = gat_stats(all_cv_rd_to_rd_scores - 0.25)
+sig = pval < 0.05
+xx, yy = np.meshgrid(times, times, copy=False, indexing='xy')
+plt.contour(xx, yy, sig, colors='k', levels=[0],
+            linestyles='dashed', linewidths=3)
+plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/rd_to_rd.png')
+# plot random to order
+plt.matshow(all_cv_rd_to_or_scores.mean(0), origin='lower', extent=[tmin, tmax, tmin, tmax], vmin=0.23, vmax=0.27)
+times = epochs_or.times
+pval = gat_stats(all_cv_rd_to_or_scores - 0.25)
+sig = pval < 0.05
+xx, yy = np.meshgrid(times, times, copy=False, indexing='xy')
+plt.contour(xx, yy, sig, colors='k', levels=[0],
+            linestyles='dashed', linewidths=3)
+plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/rd_to_or.png')
+# plot random to reorder
+plt.matshow(all_cv_rd_to_rerd_scores.mean(0), origin='lower', extent=[tmin, tmax, tmin, tmax], vmin=0.23, vmax=0.27)
+times = epochs_or.times
+pval = gat_stats(all_cv_rd_to_rerd_scores - 0.25)
+sig = pval < 0.05
+xx, yy = np.meshgrid(times, times, copy=False, indexing='xy')
+plt.contour(xx, yy, sig, colors='k', levels=[0],
+            linestyles='dashed', linewidths=3)
+plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/rd_to_rerd.png')
+# plot diff random to order minus random to random
+diff = all_cv_rd_to_or_scores - all_cv_rd_to_rd_scores
+plt.matshow(diff.mean(0), origin='lower', extent=[tmin, tmax, tmin, tmax], vmin=-0.05, vmax=0.05)
+times = epochs_or.times
+pval = gat_stats(diff)
+sig = pval < 0.05
+xx, yy = np.meshgrid(times, times, copy=False, indexing='xy')
+plt.contour(xx, yy, sig, colors='k', levels=[0],
+            linestyles='dashed', linewidths=3)
+plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/rd_to_or_minus_rd_to_rd.png')
+# plot diff random to reorder minus random to random
+diff = all_cv_rd_to_rerd_scores - all_cv_rd_to_rd_scores
+plt.matshow(diff.mean(0), origin='lower', extent=[tmin, tmax, tmin, tmax], vmin=-0.05, vmax=0.05)
+times = epochs_or.times
+pval = gat_stats(diff)
+sig = pval < 0.05
+xx, yy = np.meshgrid(times, times, copy=False, indexing='xy')
+plt.contour(xx, yy, sig, colors='k', levels=[0],
+            linestyles='dashed', linewidths=3)
+plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/rd_to_rerd_minus_rd_to_rd.png')
+# plot diff random to reorder minus random to random
+diff = all_cv_rd_to_or_scores - all_cv_rd_to_rerd_scores
+plt.matshow(diff.mean(0), origin='lower', extent=[tmin, tmax, tmin, tmax], vmin=-0.05, vmax=0.05)
+times = epochs_or.times
+pval = gat_stats(diff)
+sig = pval < 0.05
+xx, yy = np.meshgrid(times, times, copy=False, indexing='xy')
+plt.contour(xx, yy, sig, colors='k', levels=[0],
+            linestyles='dashed', linewidths=3)
+plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/rd_to_or_minus_rd_to_rerd.png')
