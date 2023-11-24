@@ -8,8 +8,10 @@ from scipy.stats import spearmanr
 
 plt.rcParams['axes.titlesize'] = 10
 
+condition = 'omission'  # 'omission' or 'sound' 
 path_results = '/Users/romainquentin/Desktop/data/MEG_demarchi/results'
-results_folder = 'reorder_random'
+results_folder = 'reorder_random_%s' % condition
+
 # list all participants
 participants = [f for f in os.listdir(path_results) if f[:1] == '1']
 # Initialize list of scores (with cross_validation)
@@ -45,13 +47,23 @@ times = np.linspace(-0.7, 0.7, all_cv_rd_to_or_scores.shape[-1])
 wh_x = np.where((times >= -0.7) & (times <= 0.7))[0]
 wh_y = np.where((times >= 0) & (times <= 0.33))[0]
 ixgrid = np.ix_(wh_y, wh_x)
-all_cv_rd_to_rd_scores = all_cv_rd_to_rd_scores[:, :, ixgrid[0], ixgrid[1]].mean(1)  # mean on the second dimension because we kept scores on each fold 
-all_cv_rd_to_mm_scores = all_cv_rd_to_mm_scores[:, :, ixgrid[0], ixgrid[1]].mean(1)
-all_cv_rd_to_mp_scores = all_cv_rd_to_mp_scores[:, :, ixgrid[0], ixgrid[1]].mean(1)
-all_cv_rd_to_or_scores = all_cv_rd_to_or_scores[:, :, ixgrid[0], ixgrid[1]].mean(1)
-all_cv_rd_to_mmrd_scores = all_cv_rd_to_mmrd_scores[:, :, ixgrid[0], ixgrid[1]].mean(1)
-all_cv_rd_to_mprd_scores = all_cv_rd_to_mprd_scores[:, :, ixgrid[0], ixgrid[1]].mean(1)
-all_cv_rd_to_orrd_scores = all_cv_rd_to_orrd_scores[:, :, ixgrid[0], ixgrid[1]].mean(1)
+# average accross cross-validation if cross-validated (sound condition)
+if condition == 'sound':
+    all_cv_rd_to_rd_scores = all_cv_rd_to_rd_scores.mean(1) 
+    all_cv_rd_to_mm_scores = all_cv_rd_to_mm_scores.mean(1)
+    all_cv_rd_to_mp_scores = all_cv_rd_to_mp_scores.mean(1)
+    all_cv_rd_to_or_scores = all_cv_rd_to_or_scores.mean(1)
+    all_cv_rd_to_mmrd_scores = all_cv_rd_to_mmrd_scores.mean(1)
+    all_cv_rd_to_mprd_scores = all_cv_rd_to_mprd_scores.mean(1)
+    all_cv_rd_to_orrd_scores = all_cv_rd_to_orrd_scores.mean(1)
+
+all_cv_rd_to_rd_scores = all_cv_rd_to_rd_scores[: ,ixgrid[0], ixgrid[1]]
+all_cv_rd_to_mm_scores = all_cv_rd_to_mm_scores[: ,ixgrid[0], ixgrid[1]]
+all_cv_rd_to_mp_scores = all_cv_rd_to_mp_scores[: ,ixgrid[0], ixgrid[1]]
+all_cv_rd_to_or_scores = all_cv_rd_to_or_scores[: ,ixgrid[0], ixgrid[1]]
+all_cv_rd_to_mmrd_scores = all_cv_rd_to_mmrd_scores[: ,ixgrid[0], ixgrid[1]]
+all_cv_rd_to_mprd_scores = all_cv_rd_to_mprd_scores[: ,ixgrid[0], ixgrid[1]]
+all_cv_rd_to_orrd_scores = all_cv_rd_to_orrd_scores[: ,ixgrid[0], ixgrid[1]]
 
 # compute spearman correlation as in Demarchi et al. across entropies
 # Initialize spearman rho results
@@ -103,7 +115,7 @@ xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
 axs[4].contour(xx, yy, all_sig[4], colors='k', levels=[0],
             linestyles='dashed', linewidths=1)
 axs[4].title.set_text('Correlation across entropies')
-plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/main_fig_demarchi.png')
+plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/main_fig_demarchi_%s.png' % condition)
 
 # compute spearman correlation as in Demarchi et al. across entropies
 # Initialize spearman rho results
@@ -154,7 +166,7 @@ xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
 axs[4].contour(xx, yy, all_sig[4], colors='k', levels=[0],
             linestyles='dashed', linewidths=1)
 axs[4].title.set_text('Correlation across entropies')
-plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/main_fig_reorder_demarchi.png')
+plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/main_fig_reorder_demarchi_%s.png' % condition)
 
 
 # Plot main figure of Demarchi et al. (Fig3a) with differences between classic and reordered trials
@@ -210,4 +222,4 @@ xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
 axs[4].contour(xx, yy, all_sig[4], colors='k', levels=[0],
             linestyles='dashed', linewidths=1)
 axs[4].title.set_text('Correlation across entropies')
-plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/main_fig_diff_with_reorder_demarchi.png')
+plt.savefig('/Users/romainquentin/Desktop/data/MEG_demarchi/figures/main_fig_diff_with_reorder_demarchi_%s.png' % condition)

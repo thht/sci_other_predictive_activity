@@ -108,8 +108,8 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
         else:
             pass
     raw_Xorrd.append(raw_Xrd[:, -200:])  # end the reorderd random with the 2 last seconds of the random raw
-    orig_nums_orrd = np.array(orig_nums)[1:-1]  # removing the first and last trials
-    events_orrd = np.array(events_orrd)[1:-1]  # removing the first and last trials
+    orig_nums_orrd = np.array(orig_nums)
+    events_orrd = np.array(events_orrd)
     raw_Xorrd = np.concatenate(raw_Xorrd, axis=1)
     raw_orrd = mne.io.RawArray(raw_Xorrd, raw_rd.info)
 
@@ -142,8 +142,8 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
         else:
             pass
     raw_Xmprd.append(raw_Xrd[:, -200:])  # end the reorderd random with the 2 last seconds of the random raw
-    orig_nums_mprd = np.array(orig_nums)[1:-1]  # removing the first and last trials
-    events_mprd = np.array(events_mprd)[1:-1]  # removing the first and last trials
+    orig_nums_mprd = np.array(orig_nums)
+    events_mprd = np.array(events_mprd)
     raw_Xmprd = np.concatenate(raw_Xmprd, axis=1)
     raw_mprd = mne.io.RawArray(raw_Xmprd, raw_rd.info)
 
@@ -166,7 +166,7 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
         if event[2] in random_events[:, 2]:
             index = random_events[:, 2].tolist().index(event[2])
             if event[2] in [10, 20, 30, 40]:
-            orig_nums.append(random_events_numbers[index])
+                orig_nums.append(random_events_numbers[index])
             samp = random_events[index, 0] - first_samp
             raw_Xmmrd.append(raw_Xrd[:, samp:samp+33])
             random_events = np.delete(random_events, index, axis=0)
@@ -176,135 +176,97 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
         else:
             pass
     raw_Xmmrd.append(raw_Xrd[:, -200:])  # end the reorderd random with the 2 last seconds of the random raw
-    orig_nums_mmrd = np.array(orig_nums)[1:-1]  # removing the first and last trials
-    events_mmrd = np.array(events_mmrd)[1:-1]  # removing the first and last trials
+    orig_nums_mmrd = np.array(orig_nums)
+    events_mmrd = np.array(events_mmrd)
     raw_Xmmrd = np.concatenate(raw_Xmmrd, axis=1)
     raw_mmrd = mne.io.RawArray(raw_Xmmrd, raw_rd.info)
 
-    # Run cross validation for the ordered (and reorder-order) (and keep the score on the random too only here)
+    # Initialize classifier 
+    clf = make_pipeline(LinearDiscriminantAnalysis())
+    clf = GeneralizingEstimator(clf, n_jobs=-1, scoring='accuracy', verbose=True)
+    # Train classifiers on random sounds
+    epochs_rd_sound = epochs_rd_init['1', '2', '3', '4']
+    Xrd_sound = epochs_rd_sound.get_data()
+    yrd_sound = epochs_rd_sound.events[:, 2]
+    clf.fit(Xrd_sound, yrd_sound)
+    
+    # Test for order (and reorder-order)
     # create an epoch from the reordered raw random 
     epochs_orrd = mne.Epochs(raw_orrd, events_orrd,
                              event_id=[10, 20, 30, 40],
-                             tmin=tmin, tmax=tmax, baseline=None, preload=True)[1:-1]
+                             tmin=tmin, tmax=tmax, baseline=None, preload=True)
     # keep same trials in epochs_rd and epochs_orrd
-    epochs_rd = epochs_rd_init[np.sort(orig_nums_orrd)]
+    epochs_rd = epochs_rd_init[orig_nums_orrd]
     # keep only the same number of trials in ordered
-    epochs_or = epochs_or[:len(epochs_rd)]
+    epochs_or = epochs_or['10', '20', '30', '40'][:len(epochs_rd)]
     # get the X and Y for each condition in numpy array
     Xor = epochs_or.get_data()
-    yor = epochs_or.events[:, 2]
+    yor = (epochs_or.events[:, 2]/10).astype(int)
     Xrd = epochs_rd.get_data()
-    yrd = epochs_rd.events[:, 2]
+    yrd = (epochs_rd.events[:, 2]/10).astype(int)
     Xorrd = epochs_orrd.get_data()
-    yorrd = epochs_orrd.events[:, 2]
-    # Initialize classifier 
-    clf = make_pipeline(LinearDiscriminantAnalysis())
-    clf = GeneralizingEstimator(clf, n_jobs=-1, scoring='accuracy', verbose=True)
-    # Train and test with cross-validation
-    cv_rd_to_rd_scores = list()
-    cv_rd_to_or_scores = list()
-    cv_rd_to_orrd_scores = list()
-    cv = StratifiedKFold(5)
-    for train_rd, test_rd in cv.split(Xrd, yrd):
-        clf.fit(Xrd[train_rd], yrd[train_rd])
-        cv_rd_to_rd_score = clf.score(Xrd[test_rd], yrd[test_rd])
-        cv_rd_to_or_score = clf.score(Xor[test_rd], yor[test_rd])
-        test_orrd = np.isin(orig_nums_orrd, test_rd)  # why sum(test_orrd) != len(test_rd) 
-        cv_rd_to_orrd_score = clf.score(Xorrd[test_orrd], yorrd[test_orrd])
-        cv_rd_to_rd_scores.append(cv_rd_to_rd_score)
-        cv_rd_to_or_scores.append(cv_rd_to_or_score)
-        cv_rd_to_orrd_scores.append(cv_rd_to_orrd_score)
-    cv_rd_to_rd_scores = np.array(cv_rd_to_rd_scores)
-    cv_rd_to_or_scores = np.array(cv_rd_to_or_scores)
-    cv_rd_to_orrd_scores = np.array(cv_rd_to_orrd_scores)
-    # save scores (cross-validation)
-    np.save(op.join(results_folder, 'cv_rd_to_rd_scores.npy'), cv_rd_to_rd_scores)
-    np.save(op.join(results_folder, 'cv_rd_to_or_scores.npy'), cv_rd_to_or_scores)
-    np.save(op.join(results_folder, 'cv_rd_to_orrd_scores.npy'), cv_rd_to_orrd_scores)
+    yorrd = (epochs_orrd.events[:, 2]/10).astype(int)
+    # test classifiers
+    cv_rd_to_rd_score = clf.score(Xrd, yrd)
+    cv_rd_to_or_score = clf.score(Xor, yor)
+    cv_rd_to_orrd_score = clf.score(Xorrd, yorrd)
+    # save scores
+    np.save(op.join(results_folder, 'cv_rd_to_rd_scores.npy'), cv_rd_to_rd_score)
+    np.save(op.join(results_folder, 'cv_rd_to_or_scores.npy'), cv_rd_to_or_score)
+    np.save(op.join(results_folder, 'cv_rd_to_orrd_scores.npy'), cv_rd_to_orrd_score)
     # append to keep the results in the python session
-    all_cv_rd_to_rd_scores.append(cv_rd_to_rd_scores.mean(0))
-    all_cv_rd_to_or_scores.append(cv_rd_to_or_scores.mean(0))
-    all_cv_rd_to_orrd_scores.append(cv_rd_to_orrd_scores.mean(0))
+    all_cv_rd_to_rd_scores.append(cv_rd_to_rd_score)
+    all_cv_rd_to_or_scores.append(cv_rd_to_or_score)
+    all_cv_rd_to_orrd_scores.append(cv_rd_to_orrd_score)
 
-    # Run cross validation for the midminus (and reorder-midminus)
+
+    # Test for midminus (and reorder-midminus)
     # create an epoch from the reordered raw random 
     epochs_mmrd = mne.Epochs(raw_mmrd, events_mmrd,
                              event_id=[10, 20, 30, 40],
-                             tmin=tmin, tmax=tmax, baseline=None, preload=True)[1:-1]
+                             tmin=tmin, tmax=tmax, baseline=None, preload=True)
     # keep same trials in epochs_rd and epochs_mmrd
-    epochs_rd = epochs_rd_init[np.sort(orig_nums_mmrd)]
-    # keep only the same number of trials in midminus
-    epochs_mm = epochs_mm[:len(epochs_rd)]
+    epochs_rd = epochs_rd_init[orig_nums_mmrd]
+    # keep only the same number of trials in ordered
+    epochs_mm = epochs_mm['10', '20', '30', '40'][:len(epochs_rd)]
     # get the X and Y for each condition in numpy array
     Xmm = epochs_mm.get_data()
-    ymm = epochs_mm.events[:, 2]
-    Xrd = epochs_rd.get_data()
-    yrd = epochs_rd.events[:, 2]
+    ymm = (epochs_mm.events[:, 2]/10).astype(int)
     Xmmrd = epochs_mmrd.get_data()
-    ymmrd = epochs_mmrd.events[:, 2]
-    # Initialize classifier 
-    clf = make_pipeline(LinearDiscriminantAnalysis())
-    clf = GeneralizingEstimator(clf, n_jobs=-1, scoring='accuracy', verbose=True)
-    # Train and test with cross-validation
-    cv_rd_to_rd_scores = list()
-    cv_rd_to_mm_scores = list()
-    cv_rd_to_mmrd_scores = list()
-    cv = StratifiedKFold(5)
-    for train_rd, test_rd in cv.split(Xrd, yrd):
-        clf.fit(Xrd[train_rd], yrd[train_rd])
-        cv_rd_to_mm_score = clf.score(Xmm[test_rd], ymm[test_rd])
-        test_mmrd = np.isin(orig_nums_mmrd, test_rd)  # why sum(test_mmrd) != len(test_rd) 
-        cv_rd_to_mmrd_score = clf.score(Xmmrd[test_mmrd], ymmrd[test_mmrd])
-        cv_rd_to_mm_scores.append(cv_rd_to_mm_score)
-        cv_rd_to_mmrd_scores.append(cv_rd_to_mmrd_score)
-    cv_rd_to_mm_scores = np.array(cv_rd_to_mm_scores)
-    cv_rd_to_mmrd_scores = np.array(cv_rd_to_mmrd_scores)
-    # save scores (cross-validation)
-    np.save(op.join(results_folder, 'cv_rd_to_mm_scores.npy'), cv_rd_to_mm_scores)
-    np.save(op.join(results_folder, 'cv_rd_to_mmrd_scores.npy'), cv_rd_to_mmrd_scores)
+    ymmrd = (epochs_mmrd.events[:, 2]/10).astype(int)
+    # test classifiers
+    cv_rd_to_mm_score = clf.score(Xmm, ymm)
+    cv_rd_to_mmrd_score = clf.score(Xmmrd, ymmrd)
+    # save scores
+    np.save(op.join(results_folder, 'cv_rd_to_mm_scores.npy'), cv_rd_to_mm_score)
+    np.save(op.join(results_folder, 'cv_rd_to_mmrd_scores.npy'), cv_rd_to_mmrd_score)
     # append to keep the results in the python session
-    all_cv_rd_to_mm_scores.append(cv_rd_to_mm_scores.mean(0))
-    all_cv_rd_to_mmrd_scores.append(cv_rd_to_mmrd_scores.mean(0))
+    all_cv_rd_to_mm_scores.append(cv_rd_to_mm_score)
+    all_cv_rd_to_mmrd_scores.append(cv_rd_to_mmrd_score)
 
-    # Run cross validation for the midplus (and reorder-midplus)
-    # create an epoch from the reordered raw random 
+    # Test for midplus (and reorder-midplus)
+    # create an epoch from the reordered raw midplus 
     epochs_mprd = mne.Epochs(raw_mprd, events_mprd,
                              event_id=[10, 20, 30, 40],
-                             tmin=tmin, tmax=tmax, baseline=None, preload=True)[1:-1]
-    # keep same trials in epochs_rd and epochs_mprd
-    epochs_rd = epochs_rd_init[np.sort(orig_nums_mprd)]
-    # keep only the same number of trials in midplus
-    epochs_mp = epochs_mp[:len(epochs_rd)]
+                             tmin=tmin, tmax=tmax, baseline=None, preload=True)
+    # keep same trials in epochs_rd and epochs_mmrd
+    epochs_rd = epochs_rd_init[orig_nums_mprd]
+    # keep only the same number of trials in ordered
+    epochs_mp = epochs_mp['10', '20', '30', '40'][:len(epochs_rd)]
     # get the X and Y for each condition in numpy array
     Xmp = epochs_mp.get_data()
-    ymp = epochs_mp.events[:, 2]
-    Xrd = epochs_rd.get_data()
-    yrd = epochs_rd.events[:, 2]
+    ymp = (epochs_mp.events[:, 2]/10).astype(int)
     Xmprd = epochs_mprd.get_data()
-    ymprd = epochs_mprd.events[:, 2]
-    # Initialize classifier 
-    clf = make_pipeline(LinearDiscriminantAnalysis())
-    clf = GeneralizingEstimator(clf, n_jobs=-1, scoring='accuracy', verbose=True)
-    # Train and test with cross-validation
-    cv_rd_to_rd_scores = list()
-    cv_rd_to_mp_scores = list()
-    cv_rd_to_mprd_scores = list()
-    cv = StratifiedKFold(5)
-    for train_rd, test_rd in cv.split(Xrd, yrd):
-        clf.fit(Xrd[train_rd], yrd[train_rd])
-        cv_rd_to_mp_score = clf.score(Xmp[test_rd], ymp[test_rd])
-        test_mprd = np.isin(orig_nums_mprd, test_rd)  # why sum(test_mprd) != len(test_rd) 
-        cv_rd_to_mprd_score = clf.score(Xmprd[test_mprd], ymprd[test_mprd])
-        cv_rd_to_mp_scores.append(cv_rd_to_mp_score)
-        cv_rd_to_mprd_scores.append(cv_rd_to_mprd_score)
-    cv_rd_to_mp_scores = np.array(cv_rd_to_mp_scores)
-    cv_rd_to_mprd_scores = np.array(cv_rd_to_mprd_scores)
-    # save scores (cross-validation)
-    np.save(op.join(results_folder, 'cv_rd_to_mp_scores.npy'), cv_rd_to_mp_scores)
-    np.save(op.join(results_folder, 'cv_rd_to_mprd_scores.npy'), cv_rd_to_mprd_scores)
+    ymprd = (epochs_mprd.events[:, 2]/10).astype(int)
+    # test classifiers
+    cv_rd_to_mp_score = clf.score(Xmp, ymp)
+    cv_rd_to_mprd_score = clf.score(Xmprd, ymprd)
+    # save scores
+    np.save(op.join(results_folder, 'cv_rd_to_mp_scores.npy'), cv_rd_to_mp_score)
+    np.save(op.join(results_folder, 'cv_rd_to_mprd_scores.npy'), cv_rd_to_mprd_score)
     # append to keep the results in the python session
-    all_cv_rd_to_mp_scores.append(cv_rd_to_mp_scores.mean(0))
-    all_cv_rd_to_mprd_scores.append(cv_rd_to_mprd_scores.mean(0))
+    all_cv_rd_to_mp_scores.append(cv_rd_to_mp_score)
+    all_cv_rd_to_mprd_scores.append(cv_rd_to_mprd_score)
 
 # create arrays with cross-validated scores
 all_cv_rd_to_rd_scores = np.array(all_cv_rd_to_rd_scores)

@@ -73,7 +73,7 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
     epochs_mp = mne.Epochs(raw_mp, events_mp,
                            event_id=[1, 2, 3, 4, 10, 20, 30, 40],
                            tmin=tmin, tmax=tmax, baseline=None, preload=True)
-    epochs_or = mne.Epochs(raw_or, events_or,
+    epochs_or = mne.Epochs(raw_or, events_or, # remove first 2 and last 2 trials
                            event_id=[1, 2, 3, 4, 10, 20, 30, 40],
                            tmin=tmin, tmax=tmax, baseline=None, preload=True)
     # remove omission and following trials in random trials
@@ -129,10 +129,10 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
             events_orrd.append([new_sample, 0, event[2]])
             new_sample+=33
         else:
-            pass
+            break
     raw_Xorrd.append(raw_Xrd[:, -200:])  # end the reorderd random with the 2 last seconds of the random raw
-    orig_nums_orrd = np.array(orig_nums)[1:-1]  # removing the first and last trials
-    events_orrd = np.array(events_orrd)[1:-1]  # removing the first and last trials
+    orig_nums_orrd = np.array(orig_nums)
+    events_orrd = np.array(events_orrd)
     raw_Xorrd = np.concatenate(raw_Xorrd, axis=1)
     raw_orrd = mne.io.RawArray(raw_Xorrd, raw_rd.info)
 
@@ -162,10 +162,10 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
             events_mprd.append([new_sample, 0, event[2]])
             new_sample+=33
         else:
-            pass
+            break
     raw_Xmprd.append(raw_Xrd[:, -200:])  # end the reorderd random with the 2 last seconds of the random raw
-    orig_nums_mprd = np.array(orig_nums)[1:-1]  # removing the first and last trials
-    events_mprd = np.array(events_mprd)[1:-1]  # removing the first and last trials
+    orig_nums_mprd = np.array(orig_nums)
+    events_mprd = np.array(events_mprd)
     raw_Xmprd = np.concatenate(raw_Xmprd, axis=1)
     raw_mprd = mne.io.RawArray(raw_Xmprd, raw_rd.info)
 
@@ -195,10 +195,10 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
             events_mmrd.append([new_sample, 0, event[2]])
             new_sample+=33
         else:
-            pass
+            break
     raw_Xmmrd.append(raw_Xrd[:, -200:])  # end the reorderd random with the 2 last seconds of the random raw
-    orig_nums_mmrd = np.array(orig_nums)[1:-1]  # removing the first and last trials
-    events_mmrd = np.array(events_mmrd)[1:-1]  # removing the first and last trials
+    orig_nums_mmrd = np.array(orig_nums)
+    events_mmrd = np.array(events_mmrd)
     raw_Xmmrd = np.concatenate(raw_Xmmrd, axis=1)
     raw_mmrd = mne.io.RawArray(raw_Xmmrd, raw_rd.info)
 
@@ -207,10 +207,10 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
     epochs_orrd = mne.Epochs(raw_orrd, events_orrd,
                              event_id=[1, 2, 3, 4],
                              tmin=tmin, tmax=tmax, baseline=None, preload=True)
-    # keep same trials in epochs_rd and epochs_orrd
-    epochs_rd = epochs_rd_init[np.sort(orig_nums_orrd)]
+    # keep same trials in epochs_rd and epochs_orrd (in the same order to allow correct cross-validation)
+    epochs_rd = epochs_rd_init[orig_nums_orrd]
     # keep only the same number of trials in ordered
-    epochs_or = epochs_or[:len(epochs_rd)]
+    epochs_or = epochs_or[:len(epochs_orrd)]
     # get the X and Y for each condition in numpy array
     Xor = epochs_or.get_data()
     yor = epochs_or.events[:, 2]
@@ -230,8 +230,7 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
         clf.fit(Xrd[train_rd], yrd[train_rd])
         cv_rd_to_rd_score = clf.score(Xrd[test_rd], yrd[test_rd])
         cv_rd_to_or_score = clf.score(Xor[test_rd], yor[test_rd])
-        test_orrd = np.isin(orig_nums_orrd, test_rd)  # why sum(test_orrd) != len(test_rd) 
-        cv_rd_to_orrd_score = clf.score(Xorrd[test_orrd], yorrd[test_orrd])
+        cv_rd_to_orrd_score = clf.score(Xorrd[test_rd], yorrd[test_rd])
         cv_rd_to_rd_scores.append(cv_rd_to_rd_score)
         cv_rd_to_or_scores.append(cv_rd_to_or_score)
         cv_rd_to_orrd_scores.append(cv_rd_to_orrd_score)
@@ -252,8 +251,8 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
     epochs_mmrd = mne.Epochs(raw_mmrd, events_mmrd,
                              event_id=[1, 2, 3, 4],
                              tmin=tmin, tmax=tmax, baseline=None, preload=True)
-    # keep same trials in epochs_rd and epochs_mmrd
-    epochs_rd = epochs_rd_init[np.sort(orig_nums_mmrd)]
+    # keep same trials in epochs_rd and epochs_orrd (in the same order to allow correct cross-validation)
+    epochs_rd = epochs_rd_init[orig_nums_mmrd]
     # keep only the same number of trials in midminus
     epochs_mm = epochs_mm[:len(epochs_rd)]
     # get the X and Y for each condition in numpy array
@@ -274,8 +273,7 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
     for train_rd, test_rd in cv.split(Xrd, yrd):
         clf.fit(Xrd[train_rd], yrd[train_rd])
         cv_rd_to_mm_score = clf.score(Xmm[test_rd], ymm[test_rd])
-        test_mmrd = np.isin(orig_nums_mmrd, test_rd)  # why sum(test_mmrd) != len(test_rd) 
-        cv_rd_to_mmrd_score = clf.score(Xmmrd[test_mmrd], ymmrd[test_mmrd])
+        cv_rd_to_mmrd_score = clf.score(Xmmrd[test_rd], ymmrd[test_rd])
         cv_rd_to_mm_scores.append(cv_rd_to_mm_score)
         cv_rd_to_mmrd_scores.append(cv_rd_to_mmrd_score)
     cv_rd_to_mm_scores = np.array(cv_rd_to_mm_scores)
@@ -292,8 +290,8 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
     epochs_mprd = mne.Epochs(raw_mprd, events_mprd,
                              event_id=[1, 2, 3, 4],
                              tmin=tmin, tmax=tmax, baseline=None, preload=True)
-    # keep same trials in epochs_rd and epochs_mprd
-    epochs_rd = epochs_rd_init[np.sort(orig_nums_mprd)]
+    # keep same trials in epochs_rd and epochs_orrd (in the same order to allow correct cross-validation)
+    epochs_rd = epochs_rd_init[orig_nums_mprd]
     # keep only the same number of trials in midplus
     epochs_mp = epochs_mp[:len(epochs_rd)]
     # get the X and Y for each condition in numpy array
@@ -314,8 +312,7 @@ for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
     for train_rd, test_rd in cv.split(Xrd, yrd):
         clf.fit(Xrd[train_rd], yrd[train_rd])
         cv_rd_to_mp_score = clf.score(Xmp[test_rd], ymp[test_rd])
-        test_mprd = np.isin(orig_nums_mprd, test_rd)  # why sum(test_mprd) != len(test_rd) 
-        cv_rd_to_mprd_score = clf.score(Xmprd[test_mprd], ymprd[test_mprd])
+        cv_rd_to_mprd_score = clf.score(Xmprd[test_rd], ymprd[test_rd])
         cv_rd_to_mp_scores.append(cv_rd_to_mp_score)
         cv_rd_to_mprd_scores.append(cv_rd_to_mprd_score)
     cv_rd_to_mp_scores = np.array(cv_rd_to_mp_scores)
