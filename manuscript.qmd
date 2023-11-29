@@ -1,0 +1,200 @@
+---
+title: "When chance is not random: decoding brain activity in structured sequences. A reevaluation of Demarchi, Sanchez & Weisz 2019"
+author: "Oussama Abdoun, Romain Quentin"
+date: last-modified
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-expand: 2
+editor: visual
+---
+
+# Abstract
+
+Multivariate pattern analysis using supervised machine learning algorithms has become a common approach to decode neural representations of perceived, retained or anticipated stimuli, among other research goals. Classically, group-level inference is performed by comparing the participant-level performance of a classifier to a baseline, so-called "chance" level. The chance level is the performance expected under the null hypothesis i.e. in the absence of the representation or process of interest. Most often, the chance level is the performance achieved on random, informationless data and will be taken as 1 over the number of classes. However, in some experimental designs the null baseline may contain information that is not fully orthogonal to the effect of interest. We investigate this phenomenon in the context of decoding anticipatory neural signals in statistical sequences of pure tones. We provide a mathematical demonstration that chance level may actually be lower or higher than 1 over class number, depending on the correlation between the transition matrix of the structured sequence and the confusion matrix of the classifier. We illustrate this on a real MEG dataset (Demarchi et al. 2019) and reevaluate the conclusions of the original study using empirical chance levels.
+
+# Results
+
+## Throwing the water
+
+Demarchi et al. have reached their conclusions by performing null hypothesis statistical testing (NHST) on decoding accuracy (with cluster-level, permutation-based correction for multiple comparisons, but this aspect of their procedure is irrelevant here). NHST requires the specification of an operational null hypothesis, i.e. the value that the mean of a population parameter is expected to take if the phenomenon of interest was assumed to not exist. Here, the phenomenon of interest is *brain anticipatory activation patterns collinear with sensory-evoked activation*; the population parameter is the *accuracy of a linear decoder* trained on evoked data from random sequences and tested on pre-stimulus data embedded in low entropy sequences; the null hypothesis is *0.25*.
+
+However, upon further inspection it appears that the assumed value of the null hypothesis is incorrect. More specifically, the true null hypothesis is actually higher than 0.25 at every timepoint where stimullus identity can be decode from brain data. We demonstrate it by reconstructing a true null hypothesis in two ways:
+
+1.  by training a linear decoder the same way as in Demarchi et al., but then testing it on data coming from random sequences but reordered stimulus-wise so as to reproduce the sequences of stimuli actually presented to participants in low entropy conditions
+
+2.  by extracting the confusion matrices from the same linear decoder, and applying it to the sequences of stimuli presented to participants in low entropy conditions in a data-independent manner
+
+As expected, both methods are equivalent and give the exact same numerical results. More interestingly, those results are statistically indistinguishable from the patterns reported by Demarchi et al. which they interpret.
+
+## But explaining why
+
+In a second step, we show why the true null hypothesis is systematically higher than the intuitive so-called "chance level" of 0.25. This is due to the transition matrix and the matrix confusion not being fully orthogonal (on average, at the group level). More specifically, it can be mathematically demonstrated that the true null hypothesis depends on the covariance between the rows of the transition matrix and the corresponding rows of the confusion matrix.
+
+Let denote $T$ a plausible $4 \times 4$ transition matrix and $C$ a plausible $4 \times 4$ confusion matrix.
+
+We accept $T$ as a plausible transition matrix if $T$:
+
+-   describes a simple Markov process: $\forall i, \sum_{j} T_{i,j}=1$ (the rowwise sum is equal to 1)
+
+-   with equi-probable states: $\lim_{n\to\infty} T^n = \frac{1}{4}J_4$ where $J_4$ is a $4 \times 4$ matrix of ones
+
+```{r}
+#| eval: false
+#| echo: false
+
+# Generate a transition matrix
+
+# --- check that the stationary distribution is equiprobable
+library(expm)
+T %^% 100
+```
+
+We take $C$ to be a plausible confusion matrix if it satisfies two conditions:
+
+-   the rowwise sum is equal to 1: $\forall i, \sum_{j} C_{i,j}=1$
+
+-   the decoder is accurate, in that it is more likely to find the true stimulus identity on average: $\forall{i,j} \in \{1,...,4\}, C_{i,i} \geq C_{i,j}$
+
+Starting from the definition of the covariance between row $i$ of $T$ and row $i$ of $C$, we have:
+
+$$\begin{aligned}
+Cov(T_i,C_i)
+&= \mathbb{E}\big[\big(T_i-\mathbb{E}(T_i)\big) \big(C_i-\mathbb{E}(C_i)\big) \big]\\
+&= \mathbb{E}(T_i C_i) - \mathbb{E}(T_i)\mathbb{E}(C_i) \\
+&= \mathbb{E}(T_i C_i) - \frac{1}{16}
+\end{aligned}$$ <!-- \sigma_{T_i} \sigma_{C_i} r_{T_i,C_i} --> <!-- &= \sum_{i}(T_{i,j}-\bar T_{j})(C_{i,j}-\bar C_{j}) \\ --> <!-- &= \sum_{i}T_{i,j}C_{i,j} - \sum_{i}\bar T_{j}C_{i,j} - \sum_{i}\bar C_{j}T_{i,j} + \sum_{i}\bar C_{j} \bar T_{j} \\ --> <!-- &= \sum_{i}T_{i,j}C_{i,j} - \bar T_{j} - \bar C_{j} + 4\bar C_{j} \bar T_{j} -->
+
+If the current stimulus $S_0$ is $j$, than the probability that it is decoded by chance (i.e. under true null hypothesis) from the preceding trial $S_{-1}$ is:
+
+$p(j|H_0) = \sum_{i} T_{i,j}C_{i,j}$
+
+Therefore, the global chance level is:
+
+$p = \frac{1}{4} \sum_{j} \sum_{i} T_{i,j}C_{i,j} = \sum_{i} \mathbb{E}[T_i C_i]$
+
+Which, combined with the expression of the covariance above, can be rewritten as: $$\begin{aligned}
+p 
+&= \sum_{i} \bigg(\frac{1}{16} + Cov(T_i,C_i) \bigg) \\
+&= \frac{1}{4} + \sum_{i} Cov(T_i,C_i)
+\end{aligned}$$
+
+Said otherwise, the empirical chance level deviates from the theoretical value (one over class number) by the summed covariances between the rows of the transition and confusion matrices.
+
+```{r}
+# CHECK formula
+
+# Demarchi et al. transition matrix (ORD condition)
+T <- matrix(c(.25,0,0,.75, .75,.25,0,0, 0,.75,.25,0, 0,0,.75,.25), ncol=4, byrow = T)
+
+# Demarchi et al. confusion matrix (RAND condition)
+C <- t(matrix(c(.40,.26,.18,.23, .22,.29,.21,.17, .17,.25,.38,.25, .21,.20,.23,.35), ncol=4, byrow = T))
+
+# --- calculate global chance level
+sum(T[,1]*C[,1] + T[,2]*C[,2] + T[,3]*C[,3] + T[,4]*C[,4])/4
+
+# --- calculate average
+# We need to use our own definition of covariance because R's cov() uses unbiased standard deviation, with n-1 denominators...
+cov_biased <- function(X,Y) {
+  return(mean(X*Y)-mean(X)*mean(Y))
+}
+cov_biased(T[1,],C[1,]) + cov_biased(T[2,],C[2,]) + cov_biased(T[3,],C[3,]) + cov_biased(T[4,],C[4,]) + .25
+
+# => the two quantities are equal !
+```
+
+## And saving the baby
+
+### Of future studies
+
+The fact that above chance level null hypothesis is induced by correlation between transition and confusion matrices offers at least two solutions:
+
+-   orthogonalize the two matrices by making off-diagonal elements of the confusion matrix equal: this might prove difficult, and seems only possible if all stimuli are at equal distances in the perceptual space
+
+-   orthogonalize the two matrices at the level of the group, by systematically varying transition matrices between participants: considering that the confusion matrix obtained from random-sequence data is independent from the transition matrix, zero correlation at the group level should be obtained by varying transition matrices that the group-averaged transition matrix is fully random
+
+Even after taking these precautions, we do not recommend proceeding with the tests assuming that H0=0.25, for at least two reasons. A minor one is that control (of the perceptual space, or of the group-average transition matrix) may have not be perfect and some bias may remain. The major reason is that the final inference is performed by comparing the sample distribution of participant-level differences from chance level to 0, and such distribution will have a higher variance if chance level is taken uniformly equal to 0.25 rather than calculated empirically participant-wise as per the equations above. Therefore, the latter approach will have greater statistical power.
+
+```{r}
+#| include: false 
+library(pwr)
+library(patchwork)
+library(tidyverse)
+```
+
+```{r}
+#| fig-width: 6
+#| fig-height: 4
+
+theme_set(theme_minimal())
+
+chance.lvls <- sample(seq(0.235,0.265,0.001))
+n <- length(chance.lvls) 
+perf.mean <- 0.010
+perf.sd <- 0.015
+
+set.seed(42)
+perf <- chance.lvls + rnorm(n, perf.mean, perf.sd)
+
+df.plot <- data.frame(chance.lvls, perf, x = 1:n)
+
+ggplot(df.plot, aes(x = x, y = perf)) +
+  geom_segment(aes(xend = x, yend = chance.lvls, color = as.factor(sign(perf-chance.lvls)))) +
+  geom_point(shape = 16, size = 2) +
+  geom_point(aes(y = chance.lvls), shape = 3, size = 2) +
+  scale_x_continuous(breaks = seq(1,31,2)) +
+  guides(color = "none") +
+  labs(x = "participant", y = "performance") +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank()) -> g1
+
+ggplot(df.plot, aes(x = 1, y = perf)) +
+  geom_hline(yintercept = 0.25, linetype = 2) +
+  geom_hline(yintercept = 0.25+perf.mean, color = "firebrick") +
+  geom_boxplot() +
+  # geom_violin() +
+  # geom_point(position = position_jitter(0.1)) +
+  annotate(geom = "text", x = 1, y = -Inf, hjust = 0.5, vjust = -0.5,
+           label = paste0("power = ", round(100*pwr.t.test(d = perf.mean/sqrt(sd(chance.lvls)^2+perf.sd^2), n = n)
+$power), "%")) +
+  expand_limits(x = c(0,2)) +
+  expand_limits(y = c(.20,.30)) +
+  guides(x = "none") +
+  labs(y = "performance") +
+  theme(axis.title.x = element_blank(),
+        panel.grid = element_blank()) -> g2
+
+ggplot(df.plot, aes(x = 1, y = perf-chance.lvls)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_hline(yintercept = 0+perf.mean, color = "firebrick") +
+  geom_boxplot() +
+  # geom_violin() +
+  # geom_point(position = position_jitter(0.1)) +
+  expand_limits(x = c(0,2)) +
+  annotate(geom = "text", x = 1, y = -Inf, hjust = 0.5, vjust = -0.5,
+           label = paste0("power = ", round(100*pwr.t.test(d = perf.mean/perf.sd, n = n)$power), "%")) +
+  guides(x = "none") +
+  expand_limits(y = c(-.05,.05)) +
+  labs(y = "performance - chance level") +
+  theme(axis.title.x = element_blank(),
+        panel.grid = element_blank()) -> g3
+  
+# sqrt(sd(chance.lvls)^2+perf.sd^2)
+# sd(chance.lvls)
+# perf.sd^2
+
+g1 / (g2+g3)
+```
+
+### Of the Demarchi et al. task
+
+We have demonstrated that the pre-stimulus decoding activity interpreted by Demarchi et al. as anticipatory activity was actually expected under the null hypothesis. However, that does not completely rule out the possibility of (linear) anticipatory activity:
+
+1.  could be revealed by fair decoding
+
+2.  could be present in the form of brain activity distinct from stimulus-evoked activity. To test that, compare $train_{ORD},test_{ORD}$ with $train_{RAND},test_{ORD}$: the latter should only contain stimulus-evoked activity, the former both stimulus-evoked and anticipatory activity. The difference between the two should be parametrically modulated by sequence entropy.
+
+```{python}
+import numpy
+```
