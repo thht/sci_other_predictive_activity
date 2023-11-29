@@ -83,15 +83,15 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#abstract" id="toc-abstract" class="nav-link active" data-scroll-target="#abstract">Abstract</a></li>
-  <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results">Results</a>
+  <li><a href="#abstract" id="toc-abstract" class="nav-link active" data-scroll-target="#abstract"><span class="header-section-number">1</span> Abstract</a></li>
+  <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results"><span class="header-section-number">2</span> Results</a>
   <ul class="collapse">
-  <li><a href="#throwing-the-water" id="toc-throwing-the-water" class="nav-link" data-scroll-target="#throwing-the-water">Throwing the water</a></li>
-  <li><a href="#but-explaining-why" id="toc-but-explaining-why" class="nav-link" data-scroll-target="#but-explaining-why">But explaining why</a></li>
-  <li><a href="#and-saving-the-baby" id="toc-and-saving-the-baby" class="nav-link" data-scroll-target="#and-saving-the-baby">And saving the baby</a>
+  <li><a href="#throwing-the-water" id="toc-throwing-the-water" class="nav-link" data-scroll-target="#throwing-the-water"><span class="header-section-number">2.1</span> Throwing the water</a></li>
+  <li><a href="#but-explaining-why" id="toc-but-explaining-why" class="nav-link" data-scroll-target="#but-explaining-why"><span class="header-section-number">2.2</span> But explaining why</a></li>
+  <li><a href="#and-saving-the-baby" id="toc-and-saving-the-baby" class="nav-link" data-scroll-target="#and-saving-the-baby"><span class="header-section-number">2.3</span> And saving the baby</a>
   <ul class="collapse">
-  <li><a href="#of-future-studies" id="toc-of-future-studies" class="nav-link" data-scroll-target="#of-future-studies">Of future studies</a></li>
-  <li><a href="#of-the-demarchi-et-al.-task" id="toc-of-the-demarchi-et-al.-task" class="nav-link" data-scroll-target="#of-the-demarchi-et-al.-task">Of the Demarchi et al.&nbsp;task</a></li>
+  <li><a href="#of-future-studies" id="toc-of-future-studies" class="nav-link" data-scroll-target="#of-future-studies"><span class="header-section-number">2.3.1</span> Of future studies</a></li>
+  <li><a href="#of-the-demarchi-et-al.-task" id="toc-of-the-demarchi-et-al.-task" class="nav-link" data-scroll-target="#of-the-demarchi-et-al.-task"><span class="header-section-number">2.3.2</span> Of the Demarchi et al.&nbsp;task</a></li>
   </ul></li>
   </ul></li>
   </ul>
@@ -128,14 +128,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 </header>
 
-<section id="abstract" class="level1">
-<h1>Abstract</h1>
+<section id="abstract" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> Abstract</h1>
 <p>Multivariate pattern analysis using supervised machine learning algorithms has become a common approach to decode neural representations of perceived, retained or anticipated stimuli, among other research goals. Classically, group-level inference is performed by comparing the participant-level performance of a classifier to a baseline, so-called “chance” level. The chance level is the performance expected under the null hypothesis i.e.&nbsp;in the absence of the representation or process of interest. Most often, the chance level is the performance achieved on random, informationless data and will be taken as 1 over the number of classes. However, in some experimental designs the null baseline may contain information that is not fully orthogonal to the effect of interest. We investigate this phenomenon in the context of decoding anticipatory neural signals in statistical sequences of pure tones. We provide a mathematical demonstration that chance level may actually be lower or higher than 1 over class number, depending on the correlation between the transition matrix of the structured sequence and the confusion matrix of the classifier. We illustrate this on a real MEG dataset (Demarchi et al.&nbsp;2019) and reevaluate the conclusions of the original study using empirical chance levels.</p>
 </section>
-<section id="results" class="level1">
-<h1>Results</h1>
-<section id="throwing-the-water" class="level2">
-<h2 class="anchored" data-anchor-id="throwing-the-water">Throwing the water</h2>
+<section id="results" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> Results</h1>
+<section id="throwing-the-water" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="throwing-the-water"><span class="header-section-number">2.1</span> Throwing the water</h2>
 <p>Demarchi et al.&nbsp;have reached their conclusions by performing null hypothesis statistical testing (NHST) on decoding accuracy (with cluster-level, permutation-based correction for multiple comparisons, but this aspect of their procedure is irrelevant here). NHST requires the specification of an operational null hypothesis, i.e.&nbsp;the value that the mean of a population parameter is expected to take if the phenomenon of interest was assumed to not exist. Here, the phenomenon of interest is <em>brain anticipatory activation patterns collinear with sensory-evoked activation</em>; the population parameter is the <em>accuracy of a linear decoder</em> trained on evoked data from random sequences and tested on pre-stimulus data embedded in low entropy sequences; the null hypothesis is <em>0.25</em>.</p>
 <p>However, upon further inspection it appears that the assumed value of the null hypothesis is incorrect. More specifically, the true null hypothesis is actually higher than 0.25 at every timepoint where stimullus identity can be decode from brain data. We demonstrate it by reconstructing a true null hypothesis in two ways:</p>
 <ol type="1">
@@ -144,8 +144,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </ol>
 <p>As expected, both methods are equivalent and give the exact same numerical results. More interestingly, those results are statistically indistinguishable from the patterns reported by Demarchi et al.&nbsp;which they interpret.</p>
 </section>
-<section id="but-explaining-why" class="level2">
-<h2 class="anchored" data-anchor-id="but-explaining-why">But explaining why</h2>
+<section id="but-explaining-why" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="but-explaining-why"><span class="header-section-number">2.2</span> But explaining why</h2>
 <p>In a second step, we show why the true null hypothesis is systematically higher than the intuitive so-called “chance level” of 0.25. This is due to the transition matrix and the matrix confusion not being fully orthogonal (on average, at the group level). More specifically, it can be mathematically demonstrated that the true null hypothesis depends on the covariance between the rows of the transition matrix and the corresponding rows of the confusion matrix.</p>
 <p>Let denote <span class="math inline">\(T\)</span> a plausible <span class="math inline">\(4 \times 4\)</span> transition matrix and <span class="math inline">\(C\)</span> a plausible <span class="math inline">\(4 \times 4\)</span> confusion matrix.</p>
 <p>We accept <span class="math inline">\(T\)</span> as a plausible transition matrix if <span class="math inline">\(T\)</span>:</p>
@@ -201,10 +201,10 @@ p
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># =&gt; the two quantities are equal !</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
-<section id="and-saving-the-baby" class="level2">
-<h2 class="anchored" data-anchor-id="and-saving-the-baby">And saving the baby</h2>
-<section id="of-future-studies" class="level3">
-<h3 class="anchored" data-anchor-id="of-future-studies">Of future studies</h3>
+<section id="and-saving-the-baby" class="level2" data-number="2.3">
+<h2 data-number="2.3" class="anchored" data-anchor-id="and-saving-the-baby"><span class="header-section-number">2.3</span> And saving the baby</h2>
+<section id="of-future-studies" class="level3" data-number="2.3.1">
+<h3 data-number="2.3.1" class="anchored" data-anchor-id="of-future-studies"><span class="header-section-number">2.3.1</span> Of future studies</h3>
 <p>The fact that above chance level null hypothesis is induced by correlation between transition and confusion matrices offers at least two solutions:</p>
 <ul>
 <li><p>orthogonalize the two matrices by making off-diagonal elements of the confusion matrix equal: this might prove difficult, and seems only possible if all stimuli are at equal distances in the perceptual space</p></li>
@@ -275,8 +275,8 @@ p
 </div>
 </div>
 </section>
-<section id="of-the-demarchi-et-al.-task" class="level3">
-<h3 class="anchored" data-anchor-id="of-the-demarchi-et-al.-task">Of the Demarchi et al.&nbsp;task</h3>
+<section id="of-the-demarchi-et-al.-task" class="level3" data-number="2.3.2">
+<h3 data-number="2.3.2" class="anchored" data-anchor-id="of-the-demarchi-et-al.-task"><span class="header-section-number">2.3.2</span> Of the Demarchi et al.&nbsp;task</h3>
 <p>We have demonstrated that the pre-stimulus decoding activity interpreted by Demarchi et al.&nbsp;as anticipatory activity was actually expected under the null hypothesis. However, that does not completely rule out the possibility of (linear) anticipatory activity:</p>
 <ol type="1">
 <li><p>could be revealed by fair decoding</p></li>
