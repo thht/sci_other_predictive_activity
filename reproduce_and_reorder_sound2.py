@@ -19,8 +19,8 @@ from mne.decoding import GeneralizingEstimator
 
 from base import corresp
 
-path_data = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/MEG'
-path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results'
+path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
+path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
 # list all data files for each condition
 # DWARNING: this assumes same ordering of files (participants)
 #MEG_rds = sorted([f for f in os.listdir(path_data) if 'random' in f])

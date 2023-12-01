@@ -11,12 +11,8 @@ from datetime import datetime
 
 plt.rcParams['axes.titlesize'] = 10
 
-#path_results = '/home/demitau/data_Quentin/data_demarchi/results'
-path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results'; s1 = ''
-#path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results0'; s1 = '_0'
-#path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results_Romain'; s1='_R'
-
-path_fig = '/p/project/icei-hbp-2022-0017/demarchi/output_plots'
+path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
+path_fig = os.path.expandvars('$DEMARCHI_FIG_PATH')
 
 results_folder = 'reorder_random'; s0=''
 #results_folder = 'reorder_random_omission'; s0='_omission'
