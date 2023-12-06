@@ -7,7 +7,17 @@ from tqdm import tqdm
 from scipy.stats import spearmanr
 import mne
 from datetime import datetime
+import matplotlib.colors as colors
+from joblib import Parallel, delayed
 
+'''
+# How to use this file
+1. set environment variables 
+$DEMARCHI_DATA_PATH and $DEMARCHI_FIG_PATH
+
+
+
+'''
 
 plt.rcParams['axes.titlesize'] = 10
 
@@ -17,8 +27,6 @@ sp = ''; s1 = '';
 #path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results0'; s1 = '_0'
 #path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results_Romain'; s1='_R'
 path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'; s1 = ''; sp = '__sp'  
-
-
 
 #path_fig = '/p/project/icei-hbp-2022-0017/demarchi/output_plots'
 path_fig = os.path.expandvars('$DEMARCHI_FIG_PATH')
@@ -54,6 +62,7 @@ for participant in participants:
     dt = datetime.fromtimestamp(os.stat(fnf).st_mtime)
     dts += [dt]
 
+    # read scores from files
     all_cv_rd_to_rd_scores.append(np.load(fnf))
     all_cv_rd_to_mm_scores.append(np.load(op.join(path_results, participant, results_folder,   'cv_rd_to_mm_scores.npy')))
     all_cv_rd_to_mp_scores.append(np.load(op.join(path_results, participant, results_folder,   'cv_rd_to_mp_scores.npy')))
@@ -81,17 +90,20 @@ all_cv_rd_to_mprd_scores_ = np.array(all_cv_rd_to_mprd_scores)
 all_cv_rd_to_orrd_scores_ = np.array(all_cv_rd_to_orrd_scores)
 
 # cut the figure to plot a smaller time window
+# all times
 times = np.linspace(-0.7, 0.7, all_cv_rd_to_or_scores.shape[-1])
 wh_x = np.where((times >= -0.7) & (times <= 0.7))[0] # 141
 wh_y = np.where((times >= 0) & (times <= 0.33))[0]  # 33
+# this ix_ is needed only because numpy (some versions of) are picky about slicing in two dimensions simultaneosly
 ixgrid = np.ix_(wh_y, wh_x)
 
 ndims = [ all_cv_rd_to_rd_scores   .ndim, all_cv_rd_to_mm_scores   .ndim, all_cv_rd_to_mp_scores   .ndim,  all_cv_rd_to_or_scores .ndim,  all_cv_rd_to_mmrd_scores.ndim,  all_cv_rd_to_mprd_scores        .ndim,  all_cv_rd_to_orrd_scores                .ndim ]
+# make sure all arrays have consisten dimensions
 assert len(set(ndims)) == 1
 
 if all_cv_rd_to_rd_scores.ndim == 4:
     # nestimators is X.shape[-1] = n_tasks
-    # (nsubjects,nsamples,nestimators,nslices)
+    # shape of scores file is (nsubjects,nsamples,nestimators,nslices)
     all_cv_rd_to_rd_scores = all_cv_rd_to_rd_scores[:, :, ixgrid[0], ixgrid[1]].mean(1)  # mean on the second dimension because we kept scores on each fold
     all_cv_rd_to_mm_scores = all_cv_rd_to_mm_scores[:, :, ixgrid[0], ixgrid[1]].mean(1)
     all_cv_rd_to_mp_scores = all_cv_rd_to_mp_scores[:, :, ixgrid[0], ixgrid[1]].mean(1)
@@ -108,31 +120,33 @@ else:
     all_cv_rd_to_mprd_scores = all_cv_rd_to_mprd_scores[:,  ixgrid[0], ixgrid[1]]
     all_cv_rd_to_orrd_scores = all_cv_rd_to_orrd_scores[:,  ixgrid[0], ixgrid[1]]
 
+# plotting parameters
+
 matshow_pars = dict(origin='lower', extent=[-0.7, 0.7, 0, 0.33],
                     cmap='inferno')
 #color_cluster = 'k'
-color_cluster = 'white'
-xlines = [-0.33,0,0.33]
-color_xline = 'grey'
-import matplotlib.colors as colors
-vmin_rhos, vmax_rhos = -0.6, 0.6
-lims_diff = -0.1, 0.1
+color_cluster = 'white' # color of cluster boundaries
+xlines = [-0.33,0,0.33] # times [s] where to draw vertical lines
+color_vline = 'grey' # vertical lines color
+vmin_rhos, vmax_rhos = -0.6, 0.6  # plotting correlation colorbar limits
+lims_diff = -0.1, 0.1             # plotting diff colorbar limits 
+# plotting scores colorbar limits  
 lims_scores = 0.23, 0.27; s = ''
 #lims_scores = 0.23, 0.30; s = f'_max_{lims_scores[1]:.1f}'
 
+# which sets of plots to generate (of 3 in total)
 plots_to_make = ['orig', 'reord', 'diff']
 #plots_to_make = ['reord']
 cleanup = 0
 
-n_jobs = -1
-from joblib import Parallel, delayed
+n_jobs = -1 # n threads for computing correlations
 
 nsamples = 33
 nsubj = 33
 nt = 141
 
 
-
+# function to compute correlations
 def f(i, rand2rd, rand2mm, rand2mp, rand2or):
     # takes scores
     rhos_ = np.zeros([nsamples, nt])
@@ -147,6 +161,7 @@ def f(i, rand2rd, rand2mm, rand2mp, rand2or):
             #print(i,rhos_.shape)
     return (i,rhos_)
 
+# first plot reproduction 
 if 'orig' in plots_to_make:
     # compute spearman correlation as in Demarchi et al. across entropies
     # Initialize spearman rho results
@@ -233,7 +248,7 @@ if 'orig' in plots_to_make:
 
     for x in xlines:
         for ax in axs:
-            ax.axvline(x, c=color_xline, ls='-')
+            ax.axvline(x, c=color_vline, ls='-')
             ax.xaxis.set_ticks_position("bottom")
 
     #plt.tight_layout()
@@ -244,6 +259,7 @@ if 'orig' in plots_to_make:
 
 #sys.exit(0)
 
+# now plot reordered version 
 if 'reord' in plots_to_make:
     ###################################################################
     # compute spearman correlation as in Demarchi et al. across entropies
@@ -345,7 +361,7 @@ if 'reord' in plots_to_make:
 
     for x in xlines:
         for ax in axs:
-            ax.axvline(x, c=color_xline, ls='-')
+            ax.axvline(x, c=color_vline, ls='-')
             ax.xaxis.set_ticks_position("bottom")
 
     plt.savefig(path_fig + f'/main_fig_reorder_demarchi{s}{s0}{s1}.png')
@@ -355,7 +371,6 @@ if 'reord' in plots_to_make:
 
 # Plot main figure of Demarchi et al. (Fig3a) with differences between classic and reordered trials
 ###################################################################
-
 
 if 'diff' in plots_to_make:
     vmin, vmax = lims_diff
@@ -449,7 +464,7 @@ if 'diff' in plots_to_make:
 
     for x in xlines:
         for ax in axs:
-            ax.axvline(x, c=color_xline, ls='-')
+            ax.axvline(x, c=color_vline, ls='-')
             ax.xaxis.set_ticks_position("bottom")
 
     #plt.tight_layout()

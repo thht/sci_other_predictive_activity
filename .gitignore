@@ -1,0 +1,16 @@
+*.py~
+*.npz
+*.swp
+*.sh*
+*.txt*
+*.Rproj
+*.ipynb
+.gitignore*
+*~
+__pycache__
+_backup_
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+maths_files/

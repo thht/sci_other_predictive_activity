@@ -18,7 +18,6 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from mne.decoding import GeneralizingEstimator
 
 from sklearn.metrics import confusion_matrix
-
 from base import corresp
 
 path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
@@ -553,7 +552,6 @@ for g,inds in grp.groups.items():
     np.save(op.join(results_folder, 'cv_rd_to_mp_scores.npy'), cv_rd_to_mp_scores)
     np.save(op.join(results_folder, 'cv_rd_to_mprd_scores.npy'), cv_rd_to_mprd_scores)
 
-    
     #shape = (nfolds, n_times, n_times, 4, 4)
     cms_rd_to_rd_perfold = np.array(cms_rd_to_rd_perfold)
 

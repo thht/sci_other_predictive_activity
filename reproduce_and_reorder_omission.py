@@ -12,8 +12,8 @@ from scipy.stats import spearmanr
 from tqdm import tqdm
 from base import corresp
 
-path_data = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/MEG'
-path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results'
+path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
+path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
 # define tmin and tmax
 tmin, tmax = -0.7, 0.7
 crop_twice = 0

@@ -126,7 +126,6 @@ def reorder(random_events, events, raw_rd, del_processed = True,
 
     return epochs_reord, orig_nums_reord
 
-
 def create_seq(n_trials, structure):
     """
     This function create a sequence with n_trials and a specific structure from random to structure (see Demarchi et al. 2019)
