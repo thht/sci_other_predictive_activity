@@ -21,12 +21,14 @@ $DEMARCHI_DATA_PATH and $DEMARCHI_FIG_PATH
 
 plt.rcParams['axes.titlesize'] = 10
 
+# s1, sp determine parts of filenames to get data from and figure names to save plots to
 sp = ''; s1 = '';
 #path_results = '/home/demitau/data_Quentin/data_demarchi/results'
 #path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results'; s1 = ''
 #path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results0'; s1 = '_0'
 #path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results_Romain'; s1='_R'
-path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'; s1 = ''; sp = '__sp'  
+#path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'; s1 = ''; sp = '__sp'  
+path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'; s1 = ''
 
 #path_fig = '/p/project/icei-hbp-2022-0017/demarchi/output_plots'
 path_fig = os.path.expandvars('$DEMARCHI_FIG_PATH')
@@ -129,9 +131,10 @@ color_cluster = 'white' # color of cluster boundaries
 xlines = [-0.33,0,0.33] # times [s] where to draw vertical lines
 color_vline = 'grey' # vertical lines color
 vmin_rhos, vmax_rhos = -0.6, 0.6  # plotting correlation colorbar limits
-lims_diff = -0.1, 0.1             # plotting diff colorbar limits 
+lims_diff = -0.02, 0.02             # plotting diff colorbar limits 
 # plotting scores colorbar limits  
-lims_scores = 0.23, 0.27; s = ''
+#lims_scores = 0.23, 0.27; s = ''
+lims_scores = 0.23, 0.285; s = ''
 #lims_scores = 0.23, 0.30; s = f'_max_{lims_scores[1]:.1f}'
 
 # which sets of plots to generate (of 3 in total)
@@ -217,22 +220,24 @@ if 'orig' in plots_to_make:
     fig, axs = plt.subplots(5, 1, figsize=(7,8), constrained_layout=True)
     fig.set_layout_engine('tight')
 
-    im = axs[3].matshow(all_cv_rd_to_rd_scores.mean(0), **matshow_pars, norm=norm1)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[3].contour(xx, yy, all_sig[3], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[3].title.set_text('Random')
+    if sp == '':
+        im = axs[3].matshow(all_cv_rd_to_rd_scores.mean(0), **matshow_pars, norm=norm1)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[3].contour(xx, yy, all_sig[3], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[3].title.set_text('Random')
 
-    axs[2].matshow(all_cv_rd_to_mm_scores.mean(0), **matshow_pars, norm=norm1)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[2].contour(xx, yy, all_sig[2], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[2].title.set_text('Midminus')
-    axs[1].matshow(all_cv_rd_to_mp_scores.mean(0), **matshow_pars, norm=norm1)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[1].contour(xx, yy, all_sig[1], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[1].title.set_text('Midplus')
+        axs[2].matshow(all_cv_rd_to_mm_scores.mean(0), **matshow_pars, norm=norm1)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[2].contour(xx, yy, all_sig[2], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[2].title.set_text('Midminus')
+        axs[1].matshow(all_cv_rd_to_mp_scores.mean(0), **matshow_pars, norm=norm1)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[1].contour(xx, yy, all_sig[1], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[1].title.set_text('Midplus')
+
     xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
     axs[0].matshow(all_cv_rd_to_or_scores.mean(0), **matshow_pars, norm=norm1)
     axs[0].contour(xx, yy, all_sig[0], colors=color_cluster, levels=[0],
@@ -240,11 +245,12 @@ if 'orig' in plots_to_make:
     axs[0].title.set_text(f'Ordered{sp}')
 
     norm_unif = colors.Normalize(vmin=vmin_rhos, vmax=vmax_rhos)
-    im2 = axs[4].matshow(rhos.mean(0), **matshow_pars, norm=norm_unif)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[4].contour(xx, yy, all_sig[4], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[4].title.set_text('Correlation across entropies')
+    if sp == '':
+        im2 = axs[4].matshow(rhos.mean(0), **matshow_pars, norm=norm_unif)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[4].contour(xx, yy, all_sig[4], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[4].title.set_text('Correlation across entropies')
 
     for x in xlines:
         for ax in axs:
@@ -252,8 +258,9 @@ if 'orig' in plots_to_make:
             ax.xaxis.set_ticks_position("bottom")
 
     #plt.tight_layout()
-    fig.colorbar(im, ax=axs[3],  norm=norm1, label='Score')
-    fig.colorbar(im2, ax=axs[4], norm=norm_unif, label='Difference')
+    for ax in axs[:4]:
+        fig.colorbar(im, ax=ax,  norm=norm1, label='Score')
+    fig.colorbar(im2, ax=axs[4], norm=norm_unif, label='Spearman rho')
 
     plt.savefig(path_fig + f'/main_fig_demarchi{s}{s0}{s1}.png')
 
@@ -319,24 +326,24 @@ if 'reord' in plots_to_make:
     # plot the 4 conditions
     fig, axs = plt.subplots(5, 1, figsize=(7,8), constrained_layout=True)
     fig.set_layout_engine('tight')
-    #if sp == ''
-    im = axs[3].matshow(all_cv_rd_to_rd_scores.mean(0), **matshow_pars, norm=norm1)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[3].contour(xx, yy, reord_all_sig[3], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[3].title.set_text('Random')
+    if sp == '':
+        im = axs[3].matshow(all_cv_rd_to_rd_scores.mean(0), **matshow_pars, norm=norm1)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[3].contour(xx, yy, reord_all_sig[3], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[3].title.set_text('Random')
 
-    axs[2].matshow(all_cv_rd_to_mmrd_scores.mean(0), **matshow_pars, norm=norm1)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[2].contour(xx, yy, reord_all_sig[2], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[2].title.set_text('Midminus rd2mmrd')
+        axs[2].matshow(all_cv_rd_to_mmrd_scores.mean(0), **matshow_pars, norm=norm1)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[2].contour(xx, yy, reord_all_sig[2], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[2].title.set_text('Midminus rd2mmrd')
 
-    axs[1].matshow(all_cv_rd_to_mprd_scores.mean(0), **matshow_pars, norm=norm1)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[1].contour(xx, yy, reord_all_sig[1], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[1].title.set_text('Midplus rd2mprd')
+        axs[1].matshow(all_cv_rd_to_mprd_scores.mean(0), **matshow_pars, norm=norm1)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[1].contour(xx, yy, reord_all_sig[1], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[1].title.set_text('Midplus rd2mprd')
 
     xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
     axs[0].matshow(all_cv_rd_to_orrd_scores.mean(0), **matshow_pars, norm=norm1)
@@ -345,19 +352,21 @@ if 'reord' in plots_to_make:
     axs[0].title.set_text(f'Ordered{sp} rd2orrd')
 
     norm_unif = colors.Normalize(vmin=vmin_rhos, vmax=vmax_rhos)
-    im2 = axs[4].matshow(rhos_reord.mean(0), **matshow_pars, norm=norm_unif)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[4].contour(xx, yy, reord_all_sig[4], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[4].title.set_text('Correlation across entropies')
+    if sp == '':
+        im2 = axs[4].matshow(rhos_reord.mean(0), **matshow_pars, norm=norm_unif)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[4].contour(xx, yy, reord_all_sig[4], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[4].title.set_text('Correlation across entropies')
 
     for ax in axs:
         ax.set_ylabel('Train time')
     axs[-1].set_xlabel('Test time')
 
 
-    fig.colorbar(im, ax=axs[3], norm=norm1, label='Score')
-    fig.colorbar(im2, ax=axs[4], norm=norm_unif, label='Difference')
+    for ax in axs[:4]:
+        fig.colorbar(im, ax=ax,  norm=norm1, label='Score')
+    fig.colorbar(im2, ax=axs[4], norm=norm_unif, label='Spearman rho')
 
     for x in xlines:
         for ax in axs:
@@ -430,22 +439,24 @@ if 'diff' in plots_to_make:
     fig, axs = plt.subplots(5, 1, figsize=(7,8), constrained_layout=True)
     fig.set_layout_engine('tight')
 
-    im =axs[3].matshow(diff_rd_to_rd.mean(0), **matshow_pars, norm=norm1_diff)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[3].contour(xx, yy, diff_all_sig[3], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[3].title.set_text('Random')
+    if sp == '':
+        im =axs[3].matshow(diff_rd_to_rd.mean(0), **matshow_pars, norm=norm1_diff)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[3].contour(xx, yy, diff_all_sig[3], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[3].title.set_text('Random')
 
-    axs[2].matshow(diff_rd_to_mmrd.mean(0), **matshow_pars, norm=norm1_diff)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[2].contour(xx, yy, diff_all_sig[2], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[2].title.set_text('Midminus')
-    axs[1].matshow(diff_rd_to_mprd.mean(0), **matshow_pars, norm=norm1_diff)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[1].contour(xx, yy, diff_all_sig[1], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[1].title.set_text('Midplus')
+        axs[2].matshow(diff_rd_to_mmrd.mean(0), **matshow_pars, norm=norm1_diff)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[2].contour(xx, yy, diff_all_sig[2], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[2].title.set_text('Midminus')
+        axs[1].matshow(diff_rd_to_mprd.mean(0), **matshow_pars, norm=norm1_diff)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[1].contour(xx, yy, diff_all_sig[1], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[1].title.set_text('Midplus')
+
     xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
     axs[0].matshow(diff_rd_to_orrd.mean(0), **matshow_pars, norm=norm1_diff)
     axs[0].contour(xx, yy, diff_all_sig[0], colors=color_cluster, levels=[0],
@@ -453,14 +464,16 @@ if 'diff' in plots_to_make:
     axs[0].title.set_text(f'Ordered{sp}')
 
     norm_unif = colors.Normalize(vmin=vmin_rhos, vmax=vmax_rhos)
-    im2 = axs[4].matshow(rhos_diff.mean(0), **matshow_pars, norm=norm_unif)
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[4].contour(xx, yy, diff_all_sig[4], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[4].title.set_text('Correlation across entropies')
+    if sp == '':
+        im2 = axs[4].matshow(rhos_diff.mean(0), **matshow_pars, norm=norm_unif)
+        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+        axs[4].contour(xx, yy, diff_all_sig[4], colors=color_cluster, levels=[0],
+                    linestyles='dashed', linewidths=1)
+        axs[4].title.set_text('Correlation across entropies')
 
-    fig.colorbar(im, ax=axs[3], norm=norm1_diff, label='Score')
-    fig.colorbar(im2, ax=axs[4], norm=norm_unif, label='Difference')
+    for ax in axs[:4]:
+        fig.colorbar(im, ax=ax,  norm=norm1, label='Score diff')
+    fig.colorbar(im2, ax=axs[4], norm=norm_unif, label='Spearman of diff')
 
     for x in xlines:
         for ax in axs:
