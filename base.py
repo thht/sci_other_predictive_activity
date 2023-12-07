@@ -45,7 +45,7 @@ def events_simple_pred(events):
 
 
 def reorder(random_events, events, raw_rd, del_processed = True,
-        cut_fl = 0):
+        cut_fl = 0, dur=200, nsamples = 33, tmin=-0.7, tmax=0.7):
     events = list(events)
 
     events_reord = list()  # the reordered events (based on yor)
@@ -64,7 +64,8 @@ def reorder(random_events, events, raw_rd, del_processed = True,
     # Romain's version
     if del_processed:
         random_events_numbers = np.arange(len(random_events)) # indices of random events
-        for event in tqdm(events):
+        #for event in tqdm(events):
+        for event in events:
             # event[2] is the event code
             # note that random_events changes on every iteration potentially
             # random events is actually _yet unprocessed_ random events
@@ -124,6 +125,7 @@ def reorder(random_events, events, raw_rd, del_processed = True,
          event_id=events_sound,
          tmin=tmin, tmax=tmax, baseline=None, preload=True)
 
+    assert len(set(orig_nums_reord)) > 4
     return epochs_reord, orig_nums_reord
 
 def create_seq(n_trials, structure):
