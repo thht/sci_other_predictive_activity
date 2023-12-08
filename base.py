@@ -24,16 +24,35 @@ events_sound = [ 1,2,3,4]
 #    M[i,(i+1) % 4] = 0.75; i+= 1
 # M[to,from]
 colors_ordered = dict(zip(np.arange(4),  ['blue','cyan','yellow','red'] ) )
-M = np.array([[0.25, 0.75, 0.  , 0.  ],
+Mor = np.array([[0.25, 0.75, 0.  , 0.  ],
                 [0.  , 0.25, 0.75, 0.  ],
                 [0.  , 0.  , 0.25, 0.75],
                 [0.75, 0.  , 0.  , 0.25]])
 
-def events_simple_pred(events):
+Mmp = np.array([[ 25, 60, 15, 0],
+                [0, 25, 60, 15],
+                [15, 0, 25, 60],
+                [60, 15, 0, 25]])/100.
+
+Mmm = np.array( [[25, 38, 37, 0  ],
+                [ 0 , 25, 38, 37 ], 
+                [ 37, 0 , 25, 38 ], 
+                [ 38, 37, 0 , 25 ]] )/100.
+
+Mt2M = {}
+Mt2M['or'] = Mor
+Mt2M['mp'] = Mmp
+Mt2M['mm'] = Mmm
+
+def events_simple_pred(events, Mtype):
     assert events.ndim == 2
     r = np.zeros_like(events)
     assert np.min(events[:,2]) == 1
     assert np.max(events[:,2]) == 4
+
+    if Mtype == 'rd':
+        return events.copy()
+    M = Mt2M[Mtype]
 
     r[:,:2] = events[:,:2]
     r[0,2] = events[0,2]

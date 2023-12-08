@@ -60,10 +60,30 @@ all_cv_rd_to_orrd_scores = list()
 order = ['Random', 'Midminus', 'Midplus', 'Ordered']
 
 # ans1 should be in in increasing order 
-ans1 = ['rd_to_rd', 'rd_to_mm', 'rd_to_mp', 'rd_to_or']; suffix += ''       
-#ans1 = ['rd_to_rd', 'rd_to_mm_sp', 'rd_to_mp_sp', 'rd_to_or_sp'];  suffix += '_sp'   
-#ans1 = ['rd_to_rd', 'mm_to_mm', 'mp_to_mp', 'or_to_or']; suffix += '_self'
-ans2 = [ an + '_reord' for an in ans1]
+#suffix += ''        
+#ans1 = ['rd_to_rd', 'rd_to_mm', 'rd_to_mp', 'rd_to_or']; 
+#ans2 = [ an + '_reord' for an in ans1]
+#
+#suffix += '_self' 
+#ans1 = ['rd_to_rd', 'mm_to_mm', 'mp_to_mp', 'or_to_or']; 
+#ans2 = ['rd_reord_to_rd_reord', 'mm_reord_to_mm_reord', 'mp_reord_to_mp_reord', 'or_reord_to_or_reord']; 
+
+suffix += '_sp' 
+# train on Xrd1,yrd1, test on X to y_sp
+# Xrd1 = epochs_rd_init[orig_nums_reord][:minl]
+# X = ordered raw, y_sp = simple pred of ordered
+ans1 = ['rd_to_rd', 'rd_to_mm_sp', 'rd_to_mp_sp', 'rd_to_or_sp'];  
+#Xreord, yreord_sp = simple pred after reord
+ans2 = ['rd_to_rd_reord_sp', 'rd_to_mm_reord_sp', 'rd_to_mp_reord_sp', 'rd_to_or_reord_sp'];  
+
+##suffix += '_selfsp' 
+##ans1 = ['rd_to_rd', 'mm_to_mm', 'mp_to_mp', 'or_to_or']; 
+##ans2 = ['rd_to_rd', 'mm_reord_to_reord_mm', 'mp_reord_to_reord_mp', 'or_reord_to_reord_or']; 
+
+## train on Xrd1,yrd1, test on Xreord to yreord_sp
+## Xreord = orderd epochs_reord, yreord_sp = take oredered events make 'simple pred' then reord
+##ans2 = [ an + '_reord' for an in ans1]
+
 ans = ans1 + ans2
 an2scores = dict( zip(ans, [ 0 ] * len(ans) ))
 for an in an2scores: # I need independent lists
@@ -85,13 +105,16 @@ for participant in participants:
             'mp_to_mp', 'mp_to_mp_reord', 'mp_to_mp_sp_fromsp', 'mp_to_mp_reord_fromsp' ]
     p+= ['rd_to_mm', 'rd_to_mm_sp', 'rd_to_mm_reord', 'rd_to_mm_sp_reord', 
             'mm_to_mm', 'mm_to_mm_reord', 'mm_to_mm_sp_fromsp', 'mm_to_mm_reord_fromsp' ]
+    p+= ['mm_reord_to_mm_reord', 'mp_reord_to_mp_reord', 'or_reord_to_or_reord' ]
+    p+= [ 'rd_to_mm_reord_sp', 'rd_to_mp_reord_sp', 'rd_to_or_reord_sp']
     fnfz = zip(p, [op.join(path_results, participant, results_folder, 'cv_' + s + '_scores.npy') for s in p] )
     fnfd = dict(fnfz)
 
     
     for an in ans:
         #print(participant, an, len(an2scores[an] ), len(an2scores[ans[0]] ), len(an2scores[ans[1]] ) )
-        if an == 'rd_to_rd_reord':
+        if an in ['rd_to_rd_reord', 'rd_reord_to_rd_reord',
+                'rd_to_rd_reord_sp'] :
             continue
 
         fnf = fnfd[an]
@@ -108,6 +131,8 @@ for participant in participants:
         dts += [dt]
 
 an2scores['rd_to_rd_reord'] = an2scores['rd_to_rd'].copy()
+an2scores['rd_reord_to_rd_reord'] = an2scores['rd_to_rd'].copy()
+an2scores['rd_to_rd_reord_sp'] = an2scores['rd_to_rd'].copy()
 
 an2scores2 = {}
 for an in ans:
@@ -156,10 +181,11 @@ sh = 0.032
 lims_scores = 0.25 - sh, 0.25 + sh; s = ''
 #lims_scores = 0.23, 0.30; s = f'_max_{lims_scores[1]:.1f}'
 suffix += s
+fsz = (7,13)
 
 # which sets of plots to generate (of 3 in total)
-#plots_to_make = ['orig', 'reord', 'diff']
-plots_to_make = ['orig', 'reord'] 
+plots_to_make = ['orig', 'reord', 'diff']
+#plots_to_make = ['orig', 'reord'] 
 #plots_to_make = ['reord']
 cleanup = 0
 
@@ -172,7 +198,7 @@ nt = 141
 
 
 # function to compute correlations
-def f(i, rand2rd, rand2mm, rand2mp, rand2or):
+def ff(i, rand2rd, rand2mm, rand2mp, rand2or):
     # takes scores
     rhos_ = np.zeros([nsamples, nt])
     for row in range(rhos_.shape[0]):
@@ -186,7 +212,11 @@ def f(i, rand2rd, rand2mm, rand2mp, rand2or):
             #print(i,rhos_.shape)
     return (i,rhos_)
 
+lbl2rhos = {}
+lbl2allsig = {}
 for lbl in plots_to_make:
+    if lbl == 'diff':
+        continue
     anscur = lbl2ans[lbl] # orig or reord
 
     # commute spearman correlation as in Demarchi et al. across entropies
@@ -213,7 +243,7 @@ for lbl in plots_to_make:
         #args = [ (i, all_cv_rd_to_rd_scores[i], all_cv_rd_to_mm_scores[i], 
         #    all_cv_rd_to_mp_scores[i], all_cv_rd_to_or_scores[i] ) for i in range(nsubj) ]
 
-        plr = Parallel(n_jobs=n_jobs, backend='multiprocessing',)(delayed(f)(*arg) for arg in args)
+        plr = Parallel(n_jobs=n_jobs, backend='multiprocessing',)(delayed(ff)(*arg) for arg in args)
         for i,rhos_ in plr:
             rhos[ i, :,: ] = rhos_
         np.savez(fn, rhos)
@@ -221,6 +251,7 @@ for lbl in plots_to_make:
         print('Load rhos')
         f = np.load(fn, allow_pickle=True)
         rhos = f['arr_0'][()]
+    lbl2rhos[lbl] = rhos
 
     fn = f'{lbl}_allsig{stimtype}{suffix}.npz'
     # Plot main figure of Demarchi et al. (Fig3a)
@@ -249,11 +280,19 @@ for lbl in plots_to_make:
         print('Load clustering')
         f = np.load(fn, allow_pickle=True)
         all_sig = f['arr_0'][()]
+    lbl2allsig[lbl] = all_sig
+
 
 for lbl in plots_to_make:
+    if lbl == 'diff':
+        continue
     anscur = lbl2ans[lbl] # orig or reord
+    
+    all_sig  = lbl2allsig[lbl]  
+    rhos = lbl2rhos[lbl] 
+
     # plot the 4 conditions
-    fig, axs = plt.subplots(5, 1, figsize=(7,8), constrained_layout=True)
+    fig, axs = plt.subplots(5, 1, figsize=fsz, constrained_layout=True)
     fig.set_layout_engine('tight')
 
     #for i in np.arange(0,4)[::-1]:
@@ -285,6 +324,7 @@ for lbl in plots_to_make:
     fig.colorbar(im2, ax=axs[4], norm=norm_unif, label='Spearman rho')
 
     plt.savefig(path_fig + f'/{lbl}_fig_demarchi{stimtype}{suffix}.png')
+    plt.close()
 
 ######################################################################
 
@@ -292,15 +332,16 @@ for lbl in plots_to_make:
 ###################################################################
 
 if 'diff' in plots_to_make:
+
+    an2scores_diff = {}
+    for i in range(len(ans1)):
+        an = ans1[i]
+        anr = ans2[i]
+        an2scores_diff[an] = an2scores[an] - an2scores[anr]
+
     vmin, vmax = lims_diff
     norm1_diff = colors.Normalize(vmin=vmin, vmax=vmax)
     chance = 0
-    # get permutations clusters
-    diff_all_sig = list()
-    diff_rd_to_orrd = all_cv_rd_to_or_scores - all_cv_rd_to_orrd_scores
-    diff_rd_to_mprd = all_cv_rd_to_mp_scores - all_cv_rd_to_mprd_scores
-    diff_rd_to_mmrd = all_cv_rd_to_mm_scores - all_cv_rd_to_mmrd_scores
-    diff_rd_to_rd = all_cv_rd_to_rd_scores - all_cv_rd_to_rd_scores
 
     # compute spearman correlation as in Demarchi et al. across entropies
     # Initialize spearman rho results
@@ -315,71 +356,103 @@ if 'diff' in plots_to_make:
         #               diff_rd_to_mmrd[i, row, column], diff_rd_to_mprd[i, row, column], diff_rd_to_orrd[i, row, column]]
         #            rhos_diff[i, row, column], _ = spearmanr([0, 1, 2, 3], corr_values)
 
-        args = [ (i,diff_rd_to_rd[i], diff_rd_to_mmrd[i], diff_rd_to_mprd[i],
-                diff_rd_to_orrd[i] ) for i in range(nsubj) ]
+        args = []
+        for i in range(nsubj):
+            arg = [i]
+            for an in ans1:
+                arg += [ an2scores_diff[an][i] ]
+            arg = tuple(arg)
+            args.append(arg)
 
         plr = Parallel(n_jobs=n_jobs, backend='multiprocessing',
-                                                )(delayed(f)(*arg) for arg in args)
+                                                )(delayed(ff)(*arg) for arg in args)
         for i,rhos_diff_ in plr:
             rhos_diff[ i, :,: ] = rhos_diff_
         np.savez(fn, rhos_diff)
     else:
-        print('Load rhos diff')
+        print('Load rhos diff ', fn)
         f = np.load(fn, allow_pickle=True)
         rhos_diff = f['arr_0'][()]
 
 
+    # get permutations clusters
+    all_sig = list()
     print('Compute clustering diff')
     fn = f'diff_allsig{stimtype}{suffix}.npz'
     if not os.path.exists(fn) or force_recalc:
-        for scores in tqdm([diff_rd_to_orrd, diff_rd_to_mprd, diff_rd_to_mmrd, diff_rd_to_rd, rhos_diff]):
+        for an in ans1[::-1]:
+        #for scores in tqdm([diff_rd_to_orrd, diff_rd_to_mprd, diff_rd_to_mmrd, diff_rd_to_rd, rhos_diff]):
+            scores = an2scores_diff[an]
+
+            scores = an2scores[an]
             print('iteration')
-            if scores.all() == rhos_diff.all():
-                gat_p_values = gat_stats(np.array(scores))
-            else:
-                gat_p_values = gat_stats(np.array(scores) - chance)
+            gat_p_values = gat_stats(np.array(scores) - chance)
             sig = np.array(gat_p_values < 0.05)
-            diff_all_sig.append(sig)
+            all_sig.append(sig)
+
+        print('iteration')
+        gat_p_values = gat_stats(rhos_diff)
+        sig = np.array(gat_p_values < 0.05)
+        all_sig.append(sig)
+
         np.savez(fn, diff_all_sig)
     else:
         f = np.load(fn, allow_pickle=True)
-        diff_all_sig = f['arr_0'][()]
+        all_sig = f['arr_0'][()]
 
     # plot the 4 conditions
-    fig, axs = plt.subplots(5, 1, figsize=(7,8), constrained_layout=True)
+    fig, axs = plt.subplots(5, 1, figsize=fsz, constrained_layout=True)
     fig.set_layout_engine('tight')
 
-    if sp == '':
-        im =axs[3].matshow(diff_rd_to_rd.mean(0), **matshow_pars, norm=norm1_diff)
-        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-        axs[3].contour(xx, yy, diff_all_sig[3], colors=color_cluster, levels=[0],
-                    linestyles='dashed', linewidths=1)
-        axs[3].title.set_text('Random')
 
-        axs[2].matshow(diff_rd_to_mmrd.mean(0), **matshow_pars, norm=norm1_diff)
+    for ani,an in enumerate(ans1):
+        dat = an2scores_diff[an]
+        i = 3 - ani
+        im = axs[i].matshow(dat.mean(0), **matshow_pars, norm=norm1_diff)
         xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-        axs[2].contour(xx, yy, diff_all_sig[2], colors=color_cluster, levels=[0],
+        axs[i].contour(xx, yy, all_sig[i], colors=color_cluster, levels=[0],
                     linestyles='dashed', linewidths=1)
-        axs[2].title.set_text('Midminus')
-        axs[1].matshow(diff_rd_to_mprd.mean(0), **matshow_pars, norm=norm1_diff)
-        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-        axs[1].contour(xx, yy, diff_all_sig[1], colors=color_cluster, levels=[0],
-                    linestyles='dashed', linewidths=1)
-        axs[1].title.set_text('Midplus')
-
-    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[0].matshow(diff_rd_to_orrd.mean(0), **matshow_pars, norm=norm1_diff)
-    axs[0].contour(xx, yy, diff_all_sig[0], colors=color_cluster, levels=[0],
-                linestyles='dashed', linewidths=1)
-    axs[0].title.set_text(f'Ordered{sp}')
+        axs[i].title.set_text(an )
 
     norm_unif = colors.Normalize(vmin=vmin_rhos, vmax=vmax_rhos)
-    if sp == '':
-        im2 = axs[4].matshow(rhos_diff.mean(0), **matshow_pars, norm=norm_unif)
-        xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-        axs[4].contour(xx, yy, diff_all_sig[4], colors=color_cluster, levels=[0],
-                    linestyles='dashed', linewidths=1)
-        axs[4].title.set_text('Correlation across entropies')
+    im2 = axs[4].matshow(rhos_diff.mean(0), **matshow_pars, norm=norm_unif)
+    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+    axs[4].contour(xx, yy, all_sig[4], colors=color_cluster, levels=[0],
+                linestyles='dashed', linewidths=1)
+    axs[4].title.set_text('Correlation across entropies')
+
+
+    #if sp == '':
+    #    im =axs[3].matshow(diff_rd_to_rd.mean(0), **matshow_pars, norm=norm1_diff)
+    #    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+    #    axs[3].contour(xx, yy, diff_all_sig[3], colors=color_cluster, levels=[0],
+    #                linestyles='dashed', linewidths=1)
+    #    axs[3].title.set_text('Random')
+
+    #    axs[2].matshow(diff_rd_to_mmrd.mean(0), **matshow_pars, norm=norm1_diff)
+    #    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+    #    axs[2].contour(xx, yy, diff_all_sig[2], colors=color_cluster, levels=[0],
+    #                linestyles='dashed', linewidths=1)
+    #    axs[2].title.set_text('Midminus')
+    #    axs[1].matshow(diff_rd_to_mprd.mean(0), **matshow_pars, norm=norm1_diff)
+    #    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+    #    axs[1].contour(xx, yy, diff_all_sig[1], colors=color_cluster, levels=[0],
+    #                linestyles='dashed', linewidths=1)
+    #    axs[1].title.set_text('Midplus')
+
+    #xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+    #axs[0].matshow(diff_rd_to_orrd.mean(0), **matshow_pars, norm=norm1_diff)
+    #axs[0].contour(xx, yy, diff_all_sig[0], colors=color_cluster, levels=[0],
+    #            linestyles='dashed', linewidths=1)
+    #axs[0].title.set_text(f'Ordered{sp}')
+
+    #norm_unif = colors.Normalize(vmin=vmin_rhos, vmax=vmax_rhos)
+    #if sp == '':
+    #    im2 = axs[4].matshow(rhos_diff.mean(0), **matshow_pars, norm=norm_unif)
+    #    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
+    #    axs[4].contour(xx, yy, diff_all_sig[4], colors=color_cluster, levels=[0],
+    #                linestyles='dashed', linewidths=1)
+    #    axs[4].title.set_text('Correlation across entropies')
 
     for ax in axs[:4]:
         fig.colorbar(im, ax=ax,  norm=norm1, label='Score diff')
@@ -392,5 +465,6 @@ if 'diff' in plots_to_make:
 
     #plt.tight_layout()
     plt.savefig(path_fig + f'/main_fig_diff_with_reorder_demarchi{stimtype}{suffix}.png')
+    plt.close()
     print('Finished successfully')
 

@@ -192,7 +192,7 @@ for g,inds in grp.groups.items():
         cond2orig_nums_reord[cond] = orig_nums_reord0
 
         #-----------------
-        events = events_simple_pred(epochs.events.copy())
+        events = events_simple_pred(epochs.events.copy(), cond2code[cond])
         epochs_reord, orig_nums_reord = reorder(random_events, events, raw_rd, **reorder_pars) 
         cond2epochs_sp_reord[cond] = epochs_reord
         cond2orig_nums_sp_reord[cond] = orig_nums_reord
@@ -227,11 +227,11 @@ for g,inds in grp.groups.items():
         epochs = epochs[:minl]  
         # get the X and Y for each condition in numpy array
         X = epochs.get_data()
-        y_sp_ = events_simple_pred(epochs.events.copy() )
+        y_sp_ = events_simple_pred(epochs.events.copy() , cond2code[cond])
         y_sp = y_sp_[:, 2] 
 
         #----------
-        epochs_reord = cond2epochs_reord[cond]
+        epochs_reord = cond2epochs_reord[cond][:minl]
         orig_nums_reord = cond2orig_nums_reord[cond] 
         # TODO: find way to use both sp and not sp, reord and not
 
@@ -247,16 +247,17 @@ for g,inds in grp.groups.items():
         Xrd2 = epochs_rd2.get_data()
         yrd2 = epochs_rd2.events[:, 2]
 
-        y0_ = epochs.events.copy()
+        y0_ = epochs.events.copy()[:minl]
         y0 = y0_[:, 2] 
 
-        Xreord = epochs_reord.get_data()
+        Xreord = epochs_reord.get_data()[:minl]
         yreord_ = epochs_reord.events
         yreord = yreord_[:, 2]
+        yreord_sp = events_simple_pred(yreord_, cond2code[cond])[:, 2]
 
-        Xreord_sp = epochs_sp_reord.get_data()
-        yreord_sp_ = epochs_sp_reord.events
-        yreord_sp = yreord_sp_[:, 2]
+        Xsp_reord = epochs_sp_reord.get_data()[:minl]
+        ysp_reord_ = epochs_sp_reord.events
+        ysp_reord = ysp_reord_[:, 2]
 
         s = cond2code[cond]
         scores = {}
@@ -286,6 +287,7 @@ for g,inds in grp.groups.items():
             else:
                 cv_rd_to_reord_score = clf.score(Xreord[test_rd], yreord[test_rd])
                 cv_rd_to_reord_sp_score = clf.score(Xreord[test_rd], yreord_sp[test_rd])
+                cv_rd_to_sp_reord_score = clf.score(Xreord[test_rd], ysp_reord[test_rd])
 
             #cv_rd_to_rd_scores.append(cv_rd_to_rd_score)
             #cv_rd_to__scores.append(cv_rd_to__score)
@@ -295,9 +297,9 @@ for g,inds in grp.groups.items():
             dadd(scores,f'rd_to_{s}_sp',cv_rd_to_sp_score        )
 
             dadd(scores,f'rd_to_{s}_reord',cv_rd_to_reord_score   )
-            dadd(scores,f'rd_to_{s}_sp_reord',cv_rd_to_reord_sp_score   )
+            dadd(scores,f'rd_to_{s}_reord_sp',cv_rd_to_reord_sp_score   )
+            dadd(scores,f'rd_to_{s}_sp_reord',cv_rd_to_sp_reord_score   )
             #'cv'
-
 
         # train on non-random and test on same or reord
         for train, test in cv.split(X, y0):
@@ -308,14 +310,31 @@ for g,inds in grp.groups.items():
             dadd(scores,f'{s}_to_{s}', cv__to__score )
             dadd(scores,f'{s}_to_{s}_reord', cv__to_reord_score )
 
-        # train on non-random simplepred and test on same or reord
-        for train, test in cv.split(X, y_sp):
-            print(f"##############  Starting {cond} fold sp2")
-            clf.fit(X[train], y_sp[train])  
-            cv__to_sp_score = clf.score(X[test], y_sp[test])
-            cv__to_reord_score = clf.score(Xreord_sp[test], yreord_sp[test])
-            dadd(scores,f'{s}_to_{s}_sp_fromsp', cv__to_sp_score )
-            dadd(scores,f'{s}_to_{s}_reord_fromsp', cv__to_reord_score )
+        for train, test in cv.split(Xreord, yreord):
+            print(f"##############  Starting {cond} fold reord")
+            clf.fit(Xreord[train], yreord[train])  
+            cv_reord_to__score = clf.score(X[test], y0[test])
+            cv_reord_to_reord_score = clf.score(Xreord[test], yreord[test])
+            dadd(scores,f'{s}_reord_to_{s}', cv_reord_to__score )
+            dadd(scores,f'{s}_reord_to_{s}_reord', cv_reord_to_reord_score )
+
+     #   # train on non-random simplepred and test on same or reord
+     #   for train, test in cv.split(X, y_sp):
+     #       print(f"##############  Starting {cond} fold sp2")
+     #       clf.fit(X[train], y_sp[train])  
+     #       cv__to_sp_score = clf.score(X[test], y_sp[test])
+     #       cv__to_reord_score = clf.score(Xsp_reord[test], ysp_reord[test])
+     #       dadd(scores,f'{s}_sp_to_{s}_sp', cv__to_sp_score )
+     #       dadd(scores,f'{s}_sp_to_{s}_reord', cv__to_reord_score )
+
+     #   # train on non-random simplepred and test on same or reord
+     #   for train, test in cv.split(Xsp_reord, ysp_reord):
+     #       print(f"##############  Starting {cond} fold sp2")
+     #       clf.fit(X[train], y_sp[train])  
+     #       cv1 = clf.score(X[test], y_sp[test])
+     #       cv2 = clf.score(Xsp_reord[test], ysp_reord[test])
+     #       dadd(scores,f'{s}_sp_reord_to_{s}_sp', cv1 )
+     #       dadd(scores,f'{s}_sp_reord_to_{s}_sp_reord', cv2 )
 
         #for train_rd, test_rd in cv.split(Xrd2, yrd2):
         #    print("##############  Starting ordered")
