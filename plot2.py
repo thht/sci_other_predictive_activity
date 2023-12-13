@@ -30,7 +30,7 @@ sp = ''; suffix = '';
 #path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results_Romain'; suffix='_R'
 #path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'; suffix = ''; sp = '__sp'  
 #path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'; suffix = ''
-path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results_test'; suffix = 'test'
+path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results_test'; suffix = '' #'test'
 
 #path_fig = '/p/project/icei-hbp-2022-0017/demarchi/output_plots'
 path_fig = os.path.expandvars('$DEMARCHI_FIG_PATH')
@@ -43,38 +43,30 @@ suffix += sp
 print('Results folder = ',path_results,  results_folder)
 
 force_recalc = int(sys.argv[1])
-print('force_recalc = ',force_recalc)
+plot_kind = sys.argv[2]
+print('force_recalc = {}, plot_kind ={} '.format(force_recalc, plot_kind) )
 
 # list all participants
 participants = [f for f in os.listdir(path_results) if f[:1] == '1']
-# Initialize list of scores (with cross_validation)
-all_cv_rd_to_rd_scores = list()
-all_cv_rd_to_mm_scores = list()
-all_cv_rd_to_mp_scores = list()
-all_cv_rd_to_or_scores = list()
-all_cv_rd_to_mmrd_scores = list()
-all_cv_rd_to_mprd_scores = list()
-all_cv_rd_to_orrd_scores = list()
+#order = ['Random', 'Midminus', 'Midplus', 'Ordered']
 
-
-order = ['Random', 'Midminus', 'Midplus', 'Ordered']
-
-# ans1 should be in in increasing order 
-#suffix += ''        
-#ans1 = ['rd_to_rd', 'rd_to_mm', 'rd_to_mp', 'rd_to_or']; 
-#ans2 = [ an + '_reord' for an in ans1]
-#
-#suffix += '_self' 
-#ans1 = ['rd_to_rd', 'mm_to_mm', 'mp_to_mp', 'or_to_or']; 
-#ans2 = ['rd_reord_to_rd_reord', 'mm_reord_to_mm_reord', 'mp_reord_to_mp_reord', 'or_reord_to_or_reord']; 
-
-suffix += '_sp' 
-# train on Xrd1,yrd1, test on X to y_sp
-# Xrd1 = epochs_rd_init[orig_nums_reord][:minl]
-# X = ordered raw, y_sp = simple pred of ordered
-ans1 = ['rd_to_rd', 'rd_to_mm_sp', 'rd_to_mp_sp', 'rd_to_or_sp'];  
-#Xreord, yreord_sp = simple pred after reord
-ans2 = ['rd_to_rd_reord_sp', 'rd_to_mm_reord_sp', 'rd_to_mp_reord_sp', 'rd_to_or_reord_sp'];  
+if plot_kind == 'rd_to_all':
+    # ans1 should be in in increasing order 
+    suffix += ''        
+    ans1 = ['rd_to_rd', 'rd_to_mm', 'rd_to_mp', 'rd_to_or']; 
+    ans2 = [ an + '_reord' for an in ans1]
+elif plot_kind == 'self':
+    suffix += '_self' 
+    ans1 = ['rd_to_rd', 'mm_to_mm', 'mp_to_mp', 'or_to_or']; 
+    ans2 = ['rd_reord_to_rd_reord', 'mm_reord_to_mm_reord', 'mp_reord_to_mp_reord', 'or_reord_to_or_reord']; 
+elif plot_kind == 'simple_pred':
+    suffix += '_sp' 
+    # train on Xrd1,yrd1, test on X to y_sp
+    # Xrd1 = epochs_rd_init[orig_nums_reord][:minl]
+    # X = ordered raw, y_sp = simple pred of ordered
+    ans1 = ['rd_to_rd', 'rd_to_mm_sp', 'rd_to_mp_sp', 'rd_to_or_sp'];  
+    #Xreord, yreord_sp = simple pred after reord
+    ans2 = ['rd_to_rd_reord_sp', 'rd_to_mm_reord_sp', 'rd_to_mp_reord_sp', 'rd_to_or_reord_sp'];  
 
 ##suffix += '_selfsp' 
 ##ans1 = ['rd_to_rd', 'mm_to_mm', 'mp_to_mp', 'or_to_or']; 
@@ -248,7 +240,8 @@ for lbl in plots_to_make:
             rhos[ i, :,: ] = rhos_
         np.savez(fn, rhos)
     else:
-        print('Load rhos')
+        dtstr = datetime.fromtimestamp(os.stat(fn).st_mtime)
+        print('Load rhos',fn, dtstr)
         f = np.load(fn, allow_pickle=True)
         rhos = f['arr_0'][()]
     lbl2rhos[lbl] = rhos
@@ -277,7 +270,8 @@ for lbl in plots_to_make:
 
         np.savez(fn, all_sig)
     else:
-        print('Load clustering')
+        dtstr = datetime.fromtimestamp(os.stat(fn).st_mtime)
+        print(f'Load clustering {fn}', dtstr )
         f = np.load(fn, allow_pickle=True)
         all_sig = f['arr_0'][()]
     lbl2allsig[lbl] = all_sig
@@ -323,7 +317,7 @@ for lbl in plots_to_make:
         fig.colorbar(im, ax=ax,  norm=norm1, label='Score')
     fig.colorbar(im2, ax=axs[4], norm=norm_unif, label='Spearman rho')
 
-    plt.savefig(path_fig + f'/{lbl}_fig_demarchi{stimtype}{suffix}.png')
+    plt.savefig(path_fig + f'/{lbl}_{stimtype}{suffix}.png')
     plt.close()
 
 ######################################################################
@@ -370,13 +364,14 @@ if 'diff' in plots_to_make:
             rhos_diff[ i, :,: ] = rhos_diff_
         np.savez(fn, rhos_diff)
     else:
-        print('Load rhos diff ', fn)
+        dtstr = datetime.fromtimestamp(os.stat(fn).st_mtime)
+        print('Load rhos diff ', fn, dtstr)
         f = np.load(fn, allow_pickle=True)
         rhos_diff = f['arr_0'][()]
 
 
     # get permutations clusters
-    all_sig = list()
+    diff_all_sig = list()
     print('Compute clustering diff')
     fn = f'diff_allsig{stimtype}{suffix}.npz'
     if not os.path.exists(fn) or force_recalc:
@@ -388,17 +383,19 @@ if 'diff' in plots_to_make:
             print('iteration')
             gat_p_values = gat_stats(np.array(scores) - chance)
             sig = np.array(gat_p_values < 0.05)
-            all_sig.append(sig)
+            diff_all_sig.append(sig)
 
         print('iteration')
         gat_p_values = gat_stats(rhos_diff)
         sig = np.array(gat_p_values < 0.05)
-        all_sig.append(sig)
+        diff_all_sig.append(sig)
 
         np.savez(fn, diff_all_sig)
     else:
+        dtstr = datetime.fromtimestamp(os.stat(fn).st_mtime)
+        print('Load all_sig diff ', fn, dtstr)
         f = np.load(fn, allow_pickle=True)
-        all_sig = f['arr_0'][()]
+        diff_all_sig = f['arr_0'][()]
 
     # plot the 4 conditions
     fig, axs = plt.subplots(5, 1, figsize=fsz, constrained_layout=True)
@@ -410,49 +407,16 @@ if 'diff' in plots_to_make:
         i = 3 - ani
         im = axs[i].matshow(dat.mean(0), **matshow_pars, norm=norm1_diff)
         xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-        axs[i].contour(xx, yy, all_sig[i], colors=color_cluster, levels=[0],
+        axs[i].contour(xx, yy, diff_all_sig[i], colors=color_cluster, levels=[0],
                     linestyles='dashed', linewidths=1)
         axs[i].title.set_text(an )
 
     norm_unif = colors.Normalize(vmin=vmin_rhos, vmax=vmax_rhos)
     im2 = axs[4].matshow(rhos_diff.mean(0), **matshow_pars, norm=norm_unif)
     xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    axs[4].contour(xx, yy, all_sig[4], colors=color_cluster, levels=[0],
+    axs[4].contour(xx, yy, diff_all_sig[4], colors=color_cluster, levels=[0],
                 linestyles='dashed', linewidths=1)
     axs[4].title.set_text('Correlation across entropies')
-
-
-    #if sp == '':
-    #    im =axs[3].matshow(diff_rd_to_rd.mean(0), **matshow_pars, norm=norm1_diff)
-    #    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    #    axs[3].contour(xx, yy, diff_all_sig[3], colors=color_cluster, levels=[0],
-    #                linestyles='dashed', linewidths=1)
-    #    axs[3].title.set_text('Random')
-
-    #    axs[2].matshow(diff_rd_to_mmrd.mean(0), **matshow_pars, norm=norm1_diff)
-    #    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    #    axs[2].contour(xx, yy, diff_all_sig[2], colors=color_cluster, levels=[0],
-    #                linestyles='dashed', linewidths=1)
-    #    axs[2].title.set_text('Midminus')
-    #    axs[1].matshow(diff_rd_to_mprd.mean(0), **matshow_pars, norm=norm1_diff)
-    #    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    #    axs[1].contour(xx, yy, diff_all_sig[1], colors=color_cluster, levels=[0],
-    #                linestyles='dashed', linewidths=1)
-    #    axs[1].title.set_text('Midplus')
-
-    #xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    #axs[0].matshow(diff_rd_to_orrd.mean(0), **matshow_pars, norm=norm1_diff)
-    #axs[0].contour(xx, yy, diff_all_sig[0], colors=color_cluster, levels=[0],
-    #            linestyles='dashed', linewidths=1)
-    #axs[0].title.set_text(f'Ordered{sp}')
-
-    #norm_unif = colors.Normalize(vmin=vmin_rhos, vmax=vmax_rhos)
-    #if sp == '':
-    #    im2 = axs[4].matshow(rhos_diff.mean(0), **matshow_pars, norm=norm_unif)
-    #    xx, yy = np.meshgrid(times[wh_x], times[wh_y], copy=False, indexing='xy')
-    #    axs[4].contour(xx, yy, diff_all_sig[4], colors=color_cluster, levels=[0],
-    #                linestyles='dashed', linewidths=1)
-    #    axs[4].title.set_text('Correlation across entropies')
 
     for ax in axs[:4]:
         fig.colorbar(im, ax=ax,  norm=norm1, label='Score diff')
@@ -464,7 +428,47 @@ if 'diff' in plots_to_make:
             ax.xaxis.set_ticks_position("bottom")
 
     #plt.tight_layout()
-    plt.savefig(path_fig + f'/main_fig_diff_with_reorder_demarchi{stimtype}{suffix}.png')
+    plt.savefig(path_fig + f'/diff_with_reord_{stimtype}{suffix}.png')
     plt.close()
+
+
+    # plot diagonals
+    inds = np.where((times >= -0.33) & (times <= 0.33))[0]
+    titles = ['Normal order','Reordered']
+    ttl0 = suffix.replace("test_",'')
+
+    fig,axs = plt.subplots(3,1, figsize=(12,10))
+    for ansi,anscur in enumerate([ans1,ans2]):
+        ax = axs[ansi]
+        #plt.figure()
+        for an in anscur:
+        #for an in an2scores.keys():
+            #an2scores[an][:,:,inds].shape
+            diags = np.diagonal(an2scores3[an][:,:,inds], axis1=1,axis2=2).mean(0)
+
+            ax.plot(times[inds],diags, label=an)
+        ax.legend(loc='upper left')
+        ax.grid(True)
+        ax.set_ylim(0.25,0.365)
+        ax.set_ylabel(f'Decoding acc,\n average across participants')
+        ax.set_xlabel('Train=test time')
+        ax.set_title(f'{plots_to_make[ansi]} {ttl0}')
+        
+    #plt.figure()
+    for ani,an in enumerate(ans1):    
+        ax = axs[2]
+        diags = np.diagonal(an2scores_diff[an][:,:,inds], axis1=1,axis2=2).mean(0)
+        ax.plot(times[inds], diags, label=f'{an} - {ans2[ani]}')
+        
+        ax.legend(loc='upper left')
+        ax.grid(True)
+        ax.set_ylim(-0.025,0.025)
+        ax.set_ylabel(f'Diff of decoding acc,\n average across participants')
+        ax.set_xlabel('Train=test time')
+        ax.set_title(f'Diffs {ttl0}')
+    plt.tight_layout()
+    plt.savefig(pjoin(path_fig,f'diag_{stimtype}{suffix}'))
+
+
     print('Finished successfully')
 
