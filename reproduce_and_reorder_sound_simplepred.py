@@ -14,11 +14,11 @@ from tqdm import tqdm
 import os.path as op
 import mne
 from sklearn.pipeline import make_pipeline
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from mne.decoding import GeneralizingEstimator
+from mne.decoding import GeneralizingEstimator, LinearModel
 
 from base import corresp
 from base import events_simple_pred
+from base import cond2code
 
 path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
 #path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
@@ -32,33 +32,44 @@ path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results_test'
 ## Start the main loop analysis - Loop on participant
 #for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
 # Initialize list of scores (with cross_validation)
-#all_cv_rd_to_rd_scores = list()
-#all_cv_rd_to_or_scores = list()
-#all_cv_rd_to_orrd_scores = list()
-#all_cv_rd_to_mm_scores = list()
-#all_cv_rd_to_mmrd_scores = list()
-#all_cv_rd_to_mp_scores = list()
-#all_cv_rd_to_mprd_scores = list()
+
+# Import the argparse module
+import argparse
+
+# Create an ArgumentParser object
+parser = argparse.ArgumentParser()
+
+# Add the arguments to the parser
+parser.add_argument("--subject", type=int, default =-1, required=True)
+parser.add_argument("--extract_filters_patterns", type=int, default =1)
+parser.add_argument("--nfolds", type=int, default=5)
+parser.add_argument("--force_refilt", type=int, default=0)
+parser.add_argument("--shuffle_cv", type=int, default=0)
+
+# Parse the arguments
+args = parser.parse_args()
+
+# Assign the arguments to the variables
+extract_filters_patterns = args.extract_filters_patterns
+nfolds = args.nfolds
+force_refilt = args.force_refilt
+shuffle_cv = bool(args.shuffle_cv)
+
+
+
 # define tmin and tmax
 from base import events_omission, events_sound
 tmin, tmax = -0.7, 0.7
 events_all = events_sound + events_omission
 del_processed = 1  # when reorder. =1 means Romain version
-force_refilt = 0
 cut_fl = 0 # True in 1st and False in last Romain ver
-shuffle_cv = False # def = False
 reord_narrow_test = 0 # True in 1st and False in last Romain ver 
 #gen_est_verbose = True
 gen_est_verbose = False # def True
 dur = 200
 nsamples = 33
 
-print('sys argv = ',sys.argv)
-if len(sys.argv) < 2:
-    print('Print supply subject ID number from [0-32]')
-    sys.exit(1)
-#subjs_to_use = ['19750430PNRK']
-sids_to_use = [int(sys.argv[1])]
+sids_to_use = [args.subject]
 #sids_to_use = [12]
 
 import pandas as pd
@@ -73,7 +84,6 @@ grp = df.groupby(['subj'])
 assert grp.size().min() == grp.size().max()
 assert grp.size().min() == 4
 
-cond2code = dict(zip(['random','midminus','midplus','ordered'],['rd','mm','mp','or']))
 
 for g,inds in grp.groups.items():
     subdf = df.loc[inds]
@@ -201,7 +211,7 @@ for g,inds in grp.groups.items():
     ########################     CV
     ###################################################################
     print("------------   Starting CV")
-    cv = StratifiedKFold(5, shuffle=shuffle_cv)
+    cv = StratifiedKFold(nfolds, shuffle=shuffle_cv)
 
     lens = [ len(ep) for ep in cond2epochs.values() ]
     lens += [ len(ep) for ep in cond2epochs_reord.values() ]
@@ -217,9 +227,13 @@ for g,inds in grp.groups.items():
             d[k] = [v]
 
     # Initialize classifier
-    clf = make_pipeline(LinearDiscriminantAnalysis())
+    if extract_filters_patterns:
+        clf = LinearModel(LinearDiscriminantAnalysis() ); 
+    else:
+        clf = make_pipeline(LinearDiscriminantAnalysis())
     clf = GeneralizingEstimator(clf, n_jobs=-1, scoring='accuracy', verbose=gen_est_verbose)
     condcond2scores = {} # tuples of cond and reord 2 scores
+
     for cond,epochs in cond2epochs.items():
         print(f"-----  CV for {cond}")
 
@@ -261,12 +275,23 @@ for g,inds in grp.groups.items():
 
         s = cond2code[cond]
         scores = {}
+
+        filters  = []
+        patterns = []
+        from base import getFiltPat
         for train_rd, test_rd in cv.split(Xrd1, yrd1):
             print(f"##############  Starting {cond} fold")
             print('Lens of train and test are :',len(train_rd), len(test_rd) )
             # Run cross validation for the ordered (and reorder-order) (and keep the score on the random too only here)
             # Train and test with cross-validation
             clf.fit(Xrd1[train_rd], yrd1[train_rd])  # fit on random
+
+            if extract_filters_patterns:
+                filters_, patterns_ = getFiltPat(clf)
+                filters  += [filters_]
+                patterns += [patterns_]
+
+
             # fit on random, test on random
             cv_rd_to_rd_score = clf.score(Xrd1[test_rd], yrd1[test_rd])
             # fit on random, test on order
@@ -300,23 +325,51 @@ for g,inds in grp.groups.items():
             dadd(scores,f'rd_to_{s}_reord_sp',cv_rd_to_reord_sp_score   )
             dadd(scores,f'rd_to_{s}_sp_reord',cv_rd_to_sp_reord_score   )
             #'cv'
+        filters_rd,patterns_rd = np.array(filters), np.array(patterns)
 
         # train on non-random and test on same or reord
+        filters  = []
+        patterns = []
         for train, test in cv.split(X, y0):
-            print(f"##############  Starting {cond} fold sp")
+            print(f"##############  Starting {cond} fold")
             clf.fit(X[train], y0[train])  
+            if extract_filters_patterns:
+                filters_, patterns_ = getFiltPat(clf)
+                filters  += [filters_]
+                patterns += [patterns_]
+
             cv__to__score = clf.score(X[test], y0[test])
             cv__to_reord_score = clf.score(Xreord[test], yreord[test])
             dadd(scores,f'{s}_to_{s}', cv__to__score )
             dadd(scores,f'{s}_to_{s}_reord', cv__to_reord_score )
+        filters_cond,patterns_cond = np.array(filters), np.array(patterns)
 
+        filters  = []
+        patterns = []
         for train, test in cv.split(Xreord, yreord):
             print(f"##############  Starting {cond} fold reord")
             clf.fit(Xreord[train], yreord[train])  
+            if extract_filters_patterns:
+                filters_, patterns_ = getFiltPat(clf)
+                filters  += [filters_]
+                patterns += [patterns_]
+
             cv_reord_to__score = clf.score(X[test], y0[test])
             cv_reord_to_reord_score = clf.score(Xreord[test], yreord[test])
             dadd(scores,f'{s}_reord_to_{s}', cv_reord_to__score )
             dadd(scores,f'{s}_reord_to_{s}_reord', cv_reord_to_reord_score )
+        filters_cond_reord,patterns_cond_reord = np.array(filters), np.array(patterns)
+
+        if extract_filters_patterns:
+            for name,(filters_,patterns_) in zip( ['fit_rd0', f'fit_{cond}',f'fit_{cond}_reord'], 
+                    [ (filters_rd,patterns_rd), (filters_cond,patterns_cond), (filters_cond_reord,patterns_cond_reord) ] ) :
+                fnf = op.join(results_folder, f'cv_{name}_filters.npy' )
+                print('Saving ',fnf)
+                np.save(fnf , filters_ )     # folds x times x classes x channels 
+
+                fnf = op.join(results_folder, f'cv_{name}_patterns.npy' )
+                print('Saving ',fnf)
+                np.save(fnf , patterns_ )    # folds x times x classes x channels
 
      #   # train on non-random simplepred and test on same or reord
      #   for train, test in cv.split(X, y_sp):

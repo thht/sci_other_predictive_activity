@@ -16,6 +16,8 @@ corresp = dict( zip(canon_subj_order, np.arange(33) ) )
 events_omission = [10,20,30,40]
 events_sound = [ 1,2,3,4]
 
+cond2code = dict(zip(['random','midminus','midplus','ordered'],['rd','mm','mp','or']))
+
 # trans mat ordered
 #M = np.zeros((4,4))
 #M += np.diag(4*[0.25])
@@ -228,3 +230,41 @@ def gat_stats(X):
         p_values_[cluster.T] = pval
 
     return np.squeeze(p_values_).T
+
+def getFiltPat(genclf):
+    from mne.decoding import get_coef
+    filters_ = [get_coef(genclf.estimators_[i],'filters_') for i in range(len(genclf.estimators_))]
+    filters_ = np.array(filters_)  # times x channels x classes
+
+    patterns_ = [get_coef(genclf.estimators_[i],'patterns_') for i in range(len(genclf.estimators_))]
+    patterns_ = np.array(patterns_)  # times x channels x classes
+
+    return filters_, patterns_
+
+def runlines(fnf,line_range_start,line_range_end):
+    # range is inclusive
+    with open(fnf,'r') as f:
+        lines = f.readlines()
+
+    sublines = lines[line_range_start:line_range_end+1]
+    
+    # remove indent as of the first line
+    l0 = sublines[0]
+    n = -1
+    for i in range(len(l0)):
+        if not l0[i].isspace():
+            n = i
+            break
+    sublines = [s[n:] for s in sublines]
+    code = ''.join(sublines)
+    
+    del lines, sublines, n, l0
+    exec(code)
+    return locals()
+
+def dadd(d,k,v):
+    # dict, key, val
+    if k in d:
+        d[k] += [v]
+    else:
+        d[k] = [v]
