@@ -246,7 +246,11 @@ def runlines(fnf,line_range_start,line_range_end):
     with open(fnf,'r') as f:
         lines = f.readlines()
 
-    sublines = lines[line_range_start:line_range_end+1]
+    if line_range_end >= 0:
+        endind = line_range_end+1
+    else:
+        endind = line_range_end
+    sublines = lines[line_range_start:endind]
     
     # remove indent as of the first line
     l0 = sublines[0]

@@ -10,6 +10,8 @@ import mne
 from datetime import datetime
 import matplotlib.colors as colors
 from joblib import Parallel, delayed
+import argparse
+
 
 '''
 # How to use this file
@@ -21,6 +23,20 @@ run file with one argument, value 0 or 1 = whethere recalc clustering and correl
 
 '''
 
+# Create an ArgumentParser object
+parser = argparse.ArgumentParser()
+parser.add_argument("--plot_kind", type=str, default = 'rd_to_all', required=True)
+parser.add_argument("--force_recalc", type=int, default = 0)
+parser.add_argument("--suffix", type=str, default = '')
+parser.add_argument("--data_subdir", type=str, default = 'results')
+parser.add_argument("--results_folder", type=str, default = 'reorder_random')
+parser.add_argument("--plots_to_make", type=str, default = 'orig,reord,diff')
+parser.add_argument("--inc_neg_time", type=int, default = 1)
+ 
+
+args = parser.parse_args()
+results_folder = args.results_folder
+
 plt.rcParams['axes.titlesize'] = 10
 
 # suffix, sp determine parts of filenames to get data from and figure names to save plots to
@@ -31,20 +47,19 @@ sp = ''; suffix = '';
 #path_results = '/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi/results_Romain'; suffix='_R'
 #path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'; suffix = ''; sp = '__sp'  
 #path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'; suffix = ''
-path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results_test'; suffix = '' #'test'
+path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/' + args.data_subdir; 
 
 #path_fig = '/p/project/icei-hbp-2022-0017/demarchi/output_plots'
 path_fig = os.path.expandvars('$DEMARCHI_FIG_PATH')
 
-results_folder = 'reorder_random'; stimtype=''  # stimtype is omission or sound
-#results_folder = 'reorder_random_omission'; stimtype='_omission'
+stimtype = results_folder[len('reorder_random'):]
 
 suffix += sp
 
-print('Results folder = ',path_results,  results_folder)
+print('Results folder = ',path_results,  results_folder, 'stimtype = ',stimtype)
 
-force_recalc = int(sys.argv[1])
-plot_kind = sys.argv[2]
+force_recalc = args.force_recalc
+plot_kind    = args.plot_kind
 print('force_recalc = {}, plot_kind ={} '.format(force_recalc, plot_kind) )
 
 # list all participants
@@ -68,6 +83,9 @@ elif plot_kind == 'simple_pred':
     ans1 = ['rd_to_rd', 'rd_to_mm_sp', 'rd_to_mp_sp', 'rd_to_or_sp'];  
     #Xreord, yreord_sp = simple pred after reord
     ans2 = ['rd_to_rd_reord_sp', 'rd_to_mm_reord_sp', 'rd_to_mp_reord_sp', 'rd_to_or_reord_sp'];  
+
+#if stimtype == 'omission':
+#    ans2 = [ an.replace('_reord','rd') for an in ans2]
 
 ##suffix += '_selfsp' 
 ##ans1 = ['rd_to_rd', 'mm_to_mm', 'mp_to_mp', 'or_to_or']; 
@@ -100,6 +118,7 @@ for participant in participants:
             'mm_to_mm', 'mm_to_mm_reord', 'mm_to_mm_sp_fromsp', 'mm_to_mm_reord_fromsp' ]
     p+= ['mm_reord_to_mm_reord', 'mp_reord_to_mp_reord', 'or_reord_to_or_reord' ]
     p+= [ 'rd_to_mm_reord_sp', 'rd_to_mp_reord_sp', 'rd_to_or_reord_sp']
+    #p+= [ 'rd_to_mmrd_sp', 'rd_to_mprd_sp', 'rd_to_or_orrd_sp']
     fnfz = zip(p, [op.join(path_results, participant, results_folder, 'cv_' + s + '_scores.npy') for s in p] )
     fnfd = dict(fnfz)
 
@@ -111,6 +130,12 @@ for participant in participants:
             continue
 
         fnf = fnfd[an]
+
+        if stimtype[1:] == 'omission':
+            fnf = fnf.replace('mm_reord','mmrd')
+            fnf = fnf.replace('mp_reord','mprd')
+            fnf = fnf.replace('or_reord','orrd')
+
         #print(fnf)
         sc_ = np.load(fnf)
         #scs += [sc_]
@@ -123,9 +148,10 @@ for participant in participants:
         dt = datetime.fromtimestamp(os.stat(fnf).st_mtime)
         dts += [dt]
 
-an2scores['rd_to_rd_reord'] = an2scores['rd_to_rd'].copy()
+# some special scores are just random to random
+an2scores['rd_to_rd_reord']       = an2scores['rd_to_rd'].copy()
 an2scores['rd_reord_to_rd_reord'] = an2scores['rd_to_rd'].copy()
-an2scores['rd_to_rd_reord_sp'] = an2scores['rd_to_rd'].copy()
+an2scores['rd_to_rd_reord_sp']    = an2scores['rd_to_rd'].copy()
 
 an2scores2 = {}
 for an in ans:
@@ -138,7 +164,7 @@ print(f'Latest computed data = ',str(np.max(dts) ) )
 # all times
 times = np.linspace(-0.7, 0.7, sc_.shape[-1])
 wh_x = np.where((times >= -0.7) & (times <= 0.7))[0] # 141
-if '_test' in path_results:
+if args.inc_neg_time:
     wh_y = np.where((times >= -0.33) & (times <= 0.33))[0]  
 else:
     wh_y = np.where((times >= 0) & (times <= 0.33))[0]  # 33
@@ -148,19 +174,29 @@ ixgrid = np.ix_(wh_y, wh_x)
 ndims = [ an2scores2[an].ndim for an in ans ]
 # make sure all arrays have consisten dimensions
 assert len(set(ndims)) == 1
-assert ndims[0] == 4
+if stimtype == '':
+    assert ndims[0] == 4
+    an2scores3 = {}
+    for an in ans:
+        # shape of scores file is (nsubjects,nsamples,nestimators,nslices)
+        #print(an2scores2[an].shape)
+        an2scores3[an] = np.array( an2scores2[an][:,:,ixgrid[0], ixgrid[1]].mean(1)   )  # mean on the second dimension because we kept scores on each fold 
+else:
+    assert ndims[0] == 3
+    an2scores3 = {}
+    for an in ans:
+        an2scores3[an] = np.array( an2scores2[an][:,ixgrid[0], ixgrid[1]]   )  # mean on the second dimension because we kept scores on each fold 
 
-an2scores3 = {}
-for an in ans:
-    # shape of scores file is (nsubjects,nsamples,nestimators,nslices)
-    #print(an2scores2[an].shape)
-    an2scores3[an] = np.array( an2scores2[an][:,:,ixgrid[0], ixgrid[1]].mean(1)   )  # mean on the second dimension because we kept scores on each fold 
 
 an2scores = an2scores3
 
 # plotting parameters
 
-matshow_pars = dict(origin='lower', extent=[-0.7, 0.7, -0.33, 0.33],
+if args.inc_neg_time:
+    xlim0 = -0.33
+else:
+    xlim0 = 0.0
+matshow_pars = dict(origin='lower', extent=[-0.7, 0.7, xlim0, 0.33],
                     cmap='inferno')
 #color_cluster = 'k'
 color_cluster = 'white' # color of cluster boundaries
@@ -177,7 +213,7 @@ suffix += s
 fsz = (7,13)
 
 # which sets of plots to generate (of 3 in total)
-plots_to_make = ['orig', 'reord', 'diff']
+plots_to_make = args.plots_to_make.split(',') #['orig', 'reord', 'diff']
 #plots_to_make = ['orig', 'reord'] 
 #plots_to_make = ['reord']
 cleanup = 0
@@ -185,7 +221,7 @@ cleanup = 0
 n_jobs = -1 # n threads for computing correlations
 
 #nsamples = 33
-nsamples = 33 * 2
+nsamples = len(wh_y)
 nsubj = 33
 nt = 141
 
@@ -218,12 +254,6 @@ for lbl in plots_to_make:
     if not os.path.exists(fn) or force_recalc:
         print('Compute rhos')
         rhos = np.zeros([nsubj, nsamples, nt])
-        #for i in tqdm(range(rhos.shape[0])):
-        #    for row in range(rhos.shape[1]):
-        #        for column in range(rhos.shape[2]):
-        #            corr_values = [all_cv_rd_to_rd_scores[i, row, column], all_cv_rd_to_mm_scores[i, row, column],
-        #                           all_cv_rd_to_mp_scores[i, row, column], all_cv_rd_to_or_scores[i, row, column]]
-        #            rhos[i, row, column], _ = spearmanr([0, 1, 2, 3], corr_values)
 
         args = []
         for i in range(nsubj):
@@ -344,12 +374,6 @@ if 'diff' in plots_to_make:
     if not os.path.exists(fn) or force_recalc:
         print('Compute rhos diff')
         rhos_diff = np.zeros([nsubj, nsamples, nt])
-        #for i in tqdm(range(rhos_diff.shape[0])):
-        #    for row in range(rhos_diff.shape[1]):
-        #        for column in range(rhos_diff.shape[2]):
-        #            corr_values = [diff_rd_to_rd[i, row, column],
-        #               diff_rd_to_mmrd[i, row, column], diff_rd_to_mprd[i, row, column], diff_rd_to_orrd[i, row, column]]
-        #            rhos_diff[i, row, column], _ = spearmanr([0, 1, 2, 3], corr_values)
 
         args = []
         for i in range(nsubj):
@@ -434,7 +458,12 @@ if 'diff' in plots_to_make:
 
 
     # plot diagonals
-    inds = np.where((times >= -0.33) & (times <= 0.33))[0]
+    if args.inc_neg_time:
+        inds = np.where((times >= -0.33) & (times <= 0.33))[0] 
+    else:
+        inds = np.where((times >= 0) & (times <= 0.33))[0]  # 33
+
+    #inds = np.where((times >= -0.33) & (times <= 0.33))[0]
     titles = ['Normal order','Reordered']
     ttl0 = suffix.replace("test_",'')
 

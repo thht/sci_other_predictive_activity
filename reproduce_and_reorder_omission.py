@@ -12,6 +12,10 @@ from scipy.stats import spearmanr
 from tqdm import tqdm
 from base import corresp
 
+from base import corresp
+from base import events_simple_pred
+from base import cond2code
+
 path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
 path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
 # define tmin and tmax
@@ -19,20 +23,7 @@ tmin, tmax = -0.7, 0.7
 crop_twice = 0
 v2only = 1
 
-print('sys argv = ',sys.argv)
-if len(sys.argv) < 2:
-    print('Print supply subject ID number from [0-32]')
-    sys.exit(1)
-#subjs_to_use = ['19750430PNRK']
-sids_to_use = [int(sys.argv[1])]
-
-# list all data files for each condition
-#MEG_rds = sorted([f for f in os.listdir(path_data) if 'random' in f])
-#MEG_mms = sorted([f for f in os.listdir(path_data) if 'midminus' in f])
-#MEG_mps = sorted([f for f in os.listdir(path_data) if 'midplus' in f])
-#MEG_ors = sorted([f for f in os.listdir(path_data) if 'ordered' in f])
 ## Initialize list of scores (with cross_validation)
-all_cv_rd_to_rd_scores = list()
 all_cv_rd_to_or_scores = list()
 all_cv_rd_to_orrd_scores = list()
 all_cv_rd_to_mm_scores = list()
@@ -41,6 +32,25 @@ all_cv_rd_to_mp_scores = list()
 all_cv_rd_to_mprd_scores = list()
 # Start the main loop analysis - Loop on participant
 #for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
+
+# Import the argparse module
+import argparse
+
+# Create an ArgumentParser object
+parser = argparse.ArgumentParser()
+
+# Add the arguments to the parser
+parser.add_argument("--subject", type=int, default =-1, required=True)
+parser.add_argument("--extract_filters_patterns", type=int, default =1)
+parser.add_argument("--nfolds", type=int, default=5)
+parser.add_argument("--force_refilt", type=int, default=0)
+parser.add_argument("--exit_after", type=str, default='end')
+
+# Parse the arguments
+args = parser.parse_args()
+force_refilt = args.force_refilt
+
+sids_to_use = [args.subject]
 
 import pandas as pd
 rows = [ dict(zip(['subj','block','cond','path'], v[:-15].split('_') + [v])  ) for v in os.listdir(path_data)]
@@ -61,13 +71,11 @@ for g,inds in grp.groups.items():
     subdf = subdf.drop(columns=['subj','block','sid'])
 
     meg_rd = subdf.to_dict('index')['random']['path']
-    meg_mm = subdf.to_dict('index')['midminus']['path']
-    meg_mp = subdf.to_dict('index')['midplus']['path']
     meg_or = subdf.to_dict('index')['ordered']['path']
-    print(meg_rd, meg_mm, meg_mp, meg_or)
+    print(meg_rd, meg_or)
 
     # results folder where to save the scores for one participant
-    ps = [p[:12] for p in [meg_rd, meg_mm, meg_mp, meg_or] ]
+    ps = [p[:12] for p in [meg_rd, meg_or] ]
     assert len(set(ps) ) == 1
 
     participant = meg_or[:12]
@@ -78,71 +86,60 @@ for g,inds in grp.groups.items():
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
 
+    cond2epochs = {}
+    cond2raw   = {}
+
     p0 = op.join( os.path.expandvars('$SCRATCH/memerr/demarchi') , meg_rd[:-15] )
-    if op.exists(op.join(p0, 'flt_rd-raw.fif')):
-        print('!!!!!   Loading precomputed filtered raws from ',p0)
-        raw_rd = mne.io.read_raw_fif(op.join(p0, 'flt_rd-raw.fif'))
-        raw_mm = mne.io.read_raw_fif(op.join(p0, 'flt_mm-raw.fif'))
-        raw_mp = mne.io.read_raw_fif(op.join(p0, 'flt_mp-raw.fif'))
-        raw_or = mne.io.read_raw_fif(op.join(p0, 'flt_or-raw.fif'))    
+    if op.exists(op.join(p0, 'flt_rd-epo.fif')) and (not force_refilt):
+        print('!!!!!   Loading precomputed filtered epochs from ',p0)
+        #epochs_rd = mne.read_epochs( op.join(p0, 'flt_rd-epo.fif'))
+        #epochs_or = mne.read_epochs( op.join(p0, 'flt_or-epo.fif'))
+        raw_rd = mne.io.read_raw_fif(op.join(p0,'flt_rd-raw.fif'), preload=True)
+        raw_rd.pick_types(meg=True, eog=False, ecg=False,
+                      ias=False, stim=False, syst=False)
+
+        for cond,condcode in cond2code.items():
+            s = condcode
+            cond2epochs[cond] = mne.read_epochs( op.join(p0, f'flt_{s}-epo.fif')) 
+
+            raw_ = mne.io.read_raw_fif(op.join(p0,f'flt_{s}-raw.fif'), preload=True) 
+            raw_.pick_types(meg=True, eog=False, ecg=False,
+                          ias=False, stim=False, syst=False)
+            cond2raw[cond] = raw_
+
     else:
-        # Add the path to each data file
-        meg_rd1 = op.join(path_data, meg_rd)
-        meg_mm1 = op.join(path_data, meg_mm)
-        meg_mp1 = op.join(path_data, meg_mp)
-        meg_or1 = op.join(path_data, meg_or)
-        # Read raw files
-        raw_rd = mne.io.read_raw_fif(meg_rd1, preload=True)
-        raw_mm = mne.io.read_raw_fif(meg_mm1, preload=True)
-        raw_mp = mne.io.read_raw_fif(meg_mp1, preload=True)
-        raw_or = mne.io.read_raw_fif(meg_or1, preload=True)
-        # Filter the raw
-        print('Filtering ')
-        raw_rd.filter(0.1, 30, n_jobs=-1)
-        raw_mm.filter(0.1, 30, n_jobs=-1)
-        raw_mp.filter(0.1, 30, n_jobs=-1)
-        raw_or.filter(0.1, 30, n_jobs=-1)
+        print('!!!!!   (Re)compute filtered raws from ',p0)
+        for cond,condcode in cond2code.items():
+            fnf = op.join(path_data, subdf.to_dict('index')[cond] )
+            # Read raw files
+            raw = mne.io.read_raw_fif(fnf, preload=True)
+            print('Filtering ')
+            raw.filter(0.1, 30, n_jobs=-1)
+            if not op.exists(p0):
+                os.makedirs(p0)
+            raw.save( op.join(p0, f'flt_{condcode}-raw.fif'), overwrite = True )
+            raw.pick_types(meg=True, eog=False, ecg=False,
+                          ias=False, stim=False, syst=False)
+            cond2raw[cond] = raw
+            # Get events
+            events = mne.find_events(raw, shortest_event=1)
 
-        if not op.exists(p0):
-            os.makedirs(p0)
-        raw_rd.save( op.join(p0, 'flt_rd-raw.fif'), overwrite = True )
-        raw_mm.save( op.join(p0, 'flt_mm-raw.fif'), overwrite = True )
-        raw_mp.save( op.join(p0, 'flt_mp-raw.fif'), overwrite = True )
-        raw_or.save( op.join(p0, 'flt_or-raw.fif'), overwrite = True )
+            # Create epochs
+            epochs = mne.Epochs(raw, events,
+                                event_id=events_all,
+                                tmin=tmin, tmax=tmax, baseline=None, preload=True)
+            epochs.save( op.join(p0, f'flt_{condcode}-epo.fif'), overwrite=True)
+            cond2epochs[cond] = epochs
 
+        raw_rd = cond2raw['random']
 
-
-    # Get events 
-    events_rd = mne.find_events(raw_rd, shortest_event=1)
-    events_mm = mne.find_events(raw_mm, shortest_event=1)
-    events_mp = mne.find_events(raw_mp, shortest_event=1)
-    events_or = mne.find_events(raw_or, shortest_event=1)
-
-    # Create epochs
-    raw_rd.pick_types(meg=True, eog=False, ecg=False,
-                  ias=False, stim=False, syst=False)
-    raw_mm.pick_types(meg=True, eog=False, ecg=False,
-                  ias=False, stim=False, syst=False)
-    raw_mp.pick_types(meg=True, eog=False, ecg=False,
-                  ias=False, stim=False, syst=False)
-    raw_or.pick_types(meg=True, eog=False, ecg=False,
-                  ias=False, stim=False, syst=False)
-    # DQ: why don't we restrict to omission trials only?
-    event_ids = [1, 2, 3, 4, 10, 20, 30, 40]
-    #event_ids = [10, 20, 30, 40]
-    epochs_rd = mne.Epochs(raw_rd, events_rd,
-                           event_id=event_ids,
-                           tmin=tmin, tmax=tmax, baseline=None, preload=True)
-    epochs_mm = mne.Epochs(raw_mm, events_mm,
-                           event_id=event_ids,
-                           tmin=tmin, tmax=tmax, baseline=None, preload=True)
-    epochs_mp = mne.Epochs(raw_mp, events_mp,
-                           event_id=event_ids,
-                           tmin=tmin, tmax=tmax, baseline=None, preload=True)
-    epochs_or = mne.Epochs(raw_or, events_or,
-                           event_id=event_ids,
-                           tmin=tmin, tmax=tmax, baseline=None, preload=True)
     # Save an epochs_rd to start from at each iteration on the decoding the reorders
+    epochs_rd = cond2epochs['random']
+    epochs_or = cond2epochs['ordered']
+    epochs_mm = cond2epochs['midminus']
+    epochs_mp = cond2epochs['midplus']
+    raw_rd = cond2raw['random']
+
     epochs_rd_init = epochs_rd.copy()
     
     # reorder random raw as ordered
@@ -251,6 +248,7 @@ for g,inds in grp.groups.items():
     ##################################################################
     ####################  V2
     ##################################################################
+    print('Starting decoding orrd')
 
     # Initialize classifier 
     clf = make_pipeline(LinearDiscriminantAnalysis())
@@ -286,15 +284,13 @@ for g,inds in grp.groups.items():
     np.save(op.join(results_folder, 'cv_rd_to_rd_scores.npy'), cv_rd_to_rd_score)
     np.save(op.join(results_folder, 'cv_rd_to_or_scores.npy'), cv_rd_to_or_score)
     np.save(op.join(results_folder, 'cv_rd_to_orrd_scores.npy'), cv_rd_to_orrd_score)
-    # append to keep the results in the python session
-    all_cv_rd_to_rd_scores.append(cv_rd_to_rd_score)
-    all_cv_rd_to_or_scores.append(cv_rd_to_or_score)
-    all_cv_rd_to_orrd_scores.append(cv_rd_to_orrd_score)
 
 
     ##################################################################
     # Test for midminus (and reorder-midminus)
     # create an epoch from the reordered raw random 
+    print('Starting decoding mmrd')
+
     epochs_mmrd = mne.Epochs(raw_mmrd, events_mmrd,
                              event_id=[10, 20, 30, 40],
                              tmin=tmin, tmax=tmax, baseline=None, preload=True)
@@ -321,6 +317,8 @@ for g,inds in grp.groups.items():
     ##################################################################
     # Test for midplus (and reorder-midplus)
     # create an epoch from the reordered raw midplus 
+    print('Starting decoding mprd')
+
     epochs_mprd = mne.Epochs(raw_mprd, events_mprd,
                              event_id=[10, 20, 30, 40],
                              tmin=tmin, tmax=tmax, baseline=None, preload=True)
@@ -339,14 +337,10 @@ for g,inds in grp.groups.items():
     # save scores
     np.save(op.join(results_folder, 'cv_rd_to_mp_scores.npy'), cv_rd_to_mp_score)
     np.save(op.join(results_folder, 'cv_rd_to_mprd_scores.npy'), cv_rd_to_mprd_score)
-    # append to keep the results in the python session
-    all_cv_rd_to_mp_scores.append(cv_rd_to_mp_score)
-    all_cv_rd_to_mprd_scores.append(cv_rd_to_mprd_score)
 
     if v2only:
+        print("Finished sucessfully")
         sys.exit(0)
-
-
 
     ##################################################################
     ####################  CV
@@ -394,10 +388,6 @@ for g,inds in grp.groups.items():
     np.save(op.join(results_folder, 'cv_rd_to_rd_scores.npy'), cv_rd_to_rd_scores)
     np.save(op.join(results_folder, 'cv_rd_to_or_scores.npy'), cv_rd_to_or_scores)
     np.save(op.join(results_folder, 'cv_rd_to_orrd_scores.npy'), cv_rd_to_orrd_scores)
-    # append to keep the results in the python session
-    all_cv_rd_to_rd_scores.append(cv_rd_to_rd_scores.mean(0))
-    all_cv_rd_to_or_scores.append(cv_rd_to_or_scores.mean(0))
-    all_cv_rd_to_orrd_scores.append(cv_rd_to_orrd_scores.mean(0))
 
     # Run cross validation for the midminus (and reorder-midminus)
     # create an epoch from the reordered raw random 
@@ -437,9 +427,6 @@ for g,inds in grp.groups.items():
     # save scores (cross-validation)
     np.save(op.join(results_folder, 'cv_rd_to_mm_scores.npy'), cv_rd_to_mm_scores)
     np.save(op.join(results_folder, 'cv_rd_to_mmrd_scores.npy'), cv_rd_to_mmrd_scores)
-    # append to keep the results in the python session
-    all_cv_rd_to_mm_scores.append(cv_rd_to_mm_scores.mean(0))
-    all_cv_rd_to_mmrd_scores.append(cv_rd_to_mmrd_scores.mean(0))
 
     # Run cross validation for the midplus (and reorder-midplus)
     # create an epoch from the reordered raw random 
@@ -479,16 +466,3 @@ for g,inds in grp.groups.items():
     # save scores (cross-validation)
     np.save(op.join(results_folder, 'cv_rd_to_mp_scores.npy'), cv_rd_to_mp_scores)
     np.save(op.join(results_folder, 'cv_rd_to_mprd_scores.npy'), cv_rd_to_mprd_scores)
-    # append to keep the results in the python session
-    all_cv_rd_to_mp_scores.append(cv_rd_to_mp_scores.mean(0))
-    all_cv_rd_to_mprd_scores.append(cv_rd_to_mprd_scores.mean(0))
-
-# create arrays with cross-validated scores
-all_cv_rd_to_rd_scores = np.array(all_cv_rd_to_rd_scores)
-all_cv_rd_to_or_scores = np.array(all_cv_rd_to_or_scores)
-all_cv_rd_to_orrd_scores = np.array(all_cv_rd_to_orrd_scores)
-all_cv_rd_to_mp_scores = np.array(all_cv_rd_to_mp_scores)
-all_cv_rd_to_mprd_scores = np.array(all_cv_rd_to_mprd_scores)
-all_cv_rd_to_mm_scores = np.array(all_cv_rd_to_mm_scores)
-all_cv_rd_to_mmrd_scores = np.array(all_cv_rd_to_mmrd_scores)
-

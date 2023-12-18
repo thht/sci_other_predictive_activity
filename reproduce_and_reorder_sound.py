@@ -10,6 +10,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.model_selection import StratifiedKFold
 from scipy.stats import spearmanr
 from tqdm import tqdm
+from collections import Counter
 
 import os.path as op
 import mne
@@ -21,8 +22,7 @@ from base import events_simple_pred
 from base import cond2code
 
 path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
-#path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
-path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results_test'
+path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
 # list all data files for each condition
 # DWARNING: this assumes same ordering of files (participants)
 #MEG_rds = sorted([f for f in os.listdir(path_data) if 'random' in f])
@@ -45,6 +45,7 @@ parser.add_argument("--extract_filters_patterns", type=int, default =1)
 parser.add_argument("--nfolds", type=int, default=5)
 parser.add_argument("--force_refilt", type=int, default=0)
 parser.add_argument("--shuffle_cv", type=int, default=0)
+parser.add_argument("--exit_after", type=str, default='end')
 
 # Parse the arguments
 args = parser.parse_args()
@@ -130,45 +131,39 @@ for g,inds in grp.groups.items():
 
     else:
         print('!!!!!   (Re)compute filtered raws from ',p0)
-        # Add the path to each data file
-        meg_rd1 = op.join(path_data, meg_rd)
-        meg_or1 = op.join(path_data, meg_or)
-        # Read raw files
-        raw_rd = mne.io.read_raw_fif(meg_rd1, preload=True)
-        raw_or = mne.io.read_raw_fif(meg_or1, preload=True)
-        # Filter the raw
-        print('Filtering ')
-        raw_rd.filter(0.1, 30, n_jobs=-1)
-        raw_or.filter(0.1, 30, n_jobs=-1)
+        for cond,condcode in cond2code.items():
+            fnf = op.join(path_data, subdf.to_dict('index')[cond] )
+            # Read raw files
+            raw = mne.io.read_raw_fif(fnf, preload=True)
+            print('Filtering ')
+            raw.filter(0.1, 30, n_jobs=-1)
+            if not op.exists(p0):
+                os.makedirs(p0)
+            raw.save( op.join(p0, f'flt_{condcode}-raw.fif'), overwrite = True )
+            raw.pick_types(meg=True, eog=False, ecg=False,
+                          ias=False, stim=False, syst=False)
+            cond2raw[cond] = raw
+            # Get events
+            events = mne.find_events(raw, shortest_event=1)
 
-        if not op.exists(p0):
-            os.makedirs(p0)
-        raw_rd.save( op.join(p0, 'flt_rd-raw.fif'), overwrite = True )
-        raw_or.save( op.join(p0, 'flt_or-raw.fif'), overwrite = True )
+            # Create epochs
+            epochs = mne.Epochs(raw, events,
+                                event_id=events_all,
+                                tmin=tmin, tmax=tmax, baseline=None, preload=True)
+            epochs.save( op.join(p0, f'flt_{condcode}-epo.fif'), overwrite=True)
+            cond2epochs[cond] = epochs
 
-        # Get events
-        events_rd = mne.find_events(raw_rd, shortest_event=1)
-        events_or = mne.find_events(raw_or, shortest_event=1)
-
-        # Create epochs
-        raw_rd.pick_types(meg=True, eog=False, ecg=False,
-                      ias=False, stim=False, syst=False)
-        raw_or.pick_types(meg=True, eog=False, ecg=False,
-                      ias=False, stim=False, syst=False)
-
-        epochs_rd = mne.Epochs(raw_rd, events_rd,
-                               event_id=events_all,
-                               tmin=tmin, tmax=tmax, baseline=None, preload=True)
-        epochs_or = mne.Epochs(raw_or, events_or,
-                               event_id=events_all,
-                               tmin=tmin, tmax=tmax, baseline=None, preload=True)
-
-        epochs_rd.save( op.join(p0, 'flt_rd-epo.fif'), overwrite=True)
-        epochs_or.save( op.join(p0, 'flt_or-epo.fif'), overwrite=True)
+        raw_or = cond2raw['ordered']
+        raw_rd = cond2raw['random']
 
 
     # remove omission and following trials in random trials
+    lens_ext = []
+    cond2counts = {}
     for cond,epochs in cond2epochs.items():
+        lens_ext += [(cond+'_keepomission',len(epochs))  ]
+        cond2counts[cond+'_keepomission'] = Counter(epochs.events[:,2])
+
         # get indices of omission events
         om = np.where(np.isin(epochs.events, events_omission))[0]
         # take next indices after them and sort indices
@@ -178,6 +173,8 @@ for g,inds in grp.groups.items():
             om_fo = np.delete(om_fo, -1)
         # remove these indices from random epochs
         cond2epochs[cond] = epochs.drop(om_fo)
+
+        cond2counts[cond] = Counter(cond2epochs[cond].events[:,2])
 
     epochs_rd_init = cond2epochs['random'].copy()
 
@@ -201,11 +198,15 @@ for g,inds in grp.groups.items():
         cond2epochs_reord[cond] = epochs_reord0
         cond2orig_nums_reord[cond] = orig_nums_reord0
 
+        cond2counts[cond+'_reord'] = Counter(cond2epochs_reord[cond].events[:,2])
+
         #-----------------
         events = events_simple_pred(epochs.events.copy(), cond2code[cond])
         epochs_reord, orig_nums_reord = reorder(random_events, events, raw_rd, **reorder_pars) 
         cond2epochs_sp_reord[cond] = epochs_reord
         cond2orig_nums_sp_reord[cond] = orig_nums_reord
+
+        cond2counts[cond+'_sp_reord'] = Counter(cond2epochs_sp_reord[cond].events[:,2])
 
     ###################################################################
     ########################     CV
@@ -218,6 +219,13 @@ for g,inds in grp.groups.items():
     lens += [ len(ep) for ep in cond2epochs_sp_reord.values() ]
     minl = np.min(lens)
     print('epochs lens = ',lens, ' minl = ',minl)
+
+    lens_ext += [ (cond,len(ep) ) for cond,ep in cond2epochs.items() ]
+    lens_ext += [ (cond+'_reord',len(ep) ) for cond,ep in cond2epochs_reord.items() ]
+    lens_ext += [ (cond+'sp_reord',len(ep) ) for cond,ep in cond2epochs_sp_reord.items() ]
+
+    if args.exit_after == 'prep_dat':
+        sys.exit(0)
 
     # helper function
     def dadd(d,k,v):
@@ -312,11 +320,10 @@ for g,inds in grp.groups.items():
             else:
                 cv_rd_to_reord_score = clf.score(Xreord[test_rd], yreord[test_rd])
                 cv_rd_to_reord_sp_score = clf.score(Xreord[test_rd], yreord_sp[test_rd])
+
+                # not used so far
                 cv_rd_to_sp_reord_score = clf.score(Xreord[test_rd], ysp_reord[test_rd])
 
-            #cv_rd_to_rd_scores.append(cv_rd_to_rd_score)
-            #cv_rd_to__scores.append(cv_rd_to__score)
-            #cv_rd_to_reord_scores.append(cv_rd_to_reord_score)
             dadd(scores,'rd_to_rd',cv_rd_to_rd_score      )
             dadd(scores,f'rd_to_{s}',cv_rd_to__score        )
             dadd(scores,f'rd_to_{s}_sp',cv_rd_to_sp_score        )
@@ -327,7 +334,7 @@ for g,inds in grp.groups.items():
             #'cv'
         filters_rd,patterns_rd = np.array(filters), np.array(patterns)
 
-        # train on non-random and test on same or reord
+        # train on non-random and test on same or reord (to make "self" plots)
         filters  = []
         patterns = []
         for train, test in cv.split(X, y0):
