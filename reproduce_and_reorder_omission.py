@@ -41,8 +41,8 @@ parser = argparse.ArgumentParser()
 
 # Add the arguments to the parser
 parser.add_argument("--subject", type=int, default =-1, required=True)
-parser.add_argument("--extract_filters_patterns", type=int, default =1)
-parser.add_argument("--nfolds", type=int, default=5)
+#parser.add_argument("--extract_filters_patterns", type=int, default =1)
+#parser.add_argument("--nfolds", type=int, default=5)
 parser.add_argument("--force_refilt", type=int, default=0)
 parser.add_argument("--exit_after", type=str, default='end')
 
@@ -283,7 +283,7 @@ for g,inds in grp.groups.items():
     # save scores
     np.save(op.join(results_folder, 'cv_rd_to_rd_scores.npy'), cv_rd_to_rd_score)
     np.save(op.join(results_folder, 'cv_rd_to_or_scores.npy'), cv_rd_to_or_score)
-    np.save(op.join(results_folder, 'cv_rd_to_orrd_scores.npy'), cv_rd_to_orrd_score)
+    np.save(op.join(results_folder, 'cv_rd_to_or_reord_scores.npy'), cv_rd_to_orrd_score)
 
 
     ##################################################################
@@ -309,7 +309,7 @@ for g,inds in grp.groups.items():
     cv_rd_to_mmrd_score = clf.score(Xmmrd, ymmrd)
     # save scores
     np.save(op.join(results_folder, 'cv_rd_to_mm_scores.npy'), cv_rd_to_mm_score)
-    np.save(op.join(results_folder, 'cv_rd_to_mmrd_scores.npy'), cv_rd_to_mmrd_score)
+    np.save(op.join(results_folder, 'cv_rd_to_mm_reord_scores.npy'), cv_rd_to_mmrd_score)
     # append to keep the results in the python session
     all_cv_rd_to_mm_scores.append(cv_rd_to_mm_score)
     all_cv_rd_to_mmrd_scores.append(cv_rd_to_mmrd_score)
@@ -336,7 +336,7 @@ for g,inds in grp.groups.items():
     cv_rd_to_mprd_score = clf.score(Xmprd, ymprd)
     # save scores
     np.save(op.join(results_folder, 'cv_rd_to_mp_scores.npy'), cv_rd_to_mp_score)
-    np.save(op.join(results_folder, 'cv_rd_to_mprd_scores.npy'), cv_rd_to_mprd_score)
+    np.save(op.join(results_folder, 'cv_rd_to_mp_reord_scores.npy'), cv_rd_to_mprd_score)
 
     if v2only:
         print("Finished sucessfully")

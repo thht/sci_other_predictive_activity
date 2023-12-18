@@ -18,9 +18,7 @@ import argparse
 1. set environment variables 
 $DEMARCHI_DATA_PATH and $DEMARCHI_FIG_PATH
 
-
-run file with one argument, value 0 or 1 = whethere recalc clustering and correlations or not
-
+run file with arguments 
 '''
 
 # Create an ArgumentParser object
@@ -131,10 +129,10 @@ for participant in participants:
 
         fnf = fnfd[an]
 
-        if stimtype[1:] == 'omission':
-            fnf = fnf.replace('mm_reord','mmrd')
-            fnf = fnf.replace('mp_reord','mprd')
-            fnf = fnf.replace('or_reord','orrd')
+        #if stimtype == '_omission':
+        #    fnf = fnf.replace('mm_reord','mmrd')
+        #    fnf = fnf.replace('mp_reord','mprd')
+        #    fnf = fnf.replace('or_reord','orrd')
 
         #print(fnf)
         sc_ = np.load(fnf)
