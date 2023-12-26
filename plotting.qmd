@@ -14,6 +14,7 @@ bibliography: references.bib
 ## Libraries
 
 ```{r}
+library(expm)
 library(patchwork)
 library(magrittr)
 library(tidyverse)
@@ -35,15 +36,15 @@ n.subj <- length(list.subj)
 ### Matrix to df
 
 ```{r}
-matrix_to_df <- function(array, row.name = "t_train", col.name = "t_test", val.name = "value") {
-  array %>% 
-    as_tibble() %>%
-    rownames_to_column("t_train") %>%
-    pivot_longer(-t_train, names_to = "t_test", values_to = "value") %>% 
-    mutate(t_test = str_remove(t_test, "V")) %>% 
-    mutate(across(starts_with("t_"), ~(10*(as.numeric(.)-1)-700))) %>% 
-    return
-}
+# matrix_to_df <- function(array, row.name = "t_train", col.name = "t_test", val.name = "value") {
+#   array %>% 
+#     as_tibble() %>%
+#     rownames_to_column("t_train") %>%
+#     pivot_longer(-t_train, names_to = "t_test", values_to = "value") %>% 
+#     mutate(t_test = str_remove(t_test, "V")) %>% 
+#     mutate(across(starts_with("t_"), ~(10*(as.numeric(.)-1)-700))) %>% 
+#     return
+# }
 
 matrix_to_df2 <- function(array, row.name, col.name, val.name) {
   array %>% 
@@ -51,7 +52,7 @@ matrix_to_df2 <- function(array, row.name, col.name, val.name) {
     rownames_to_column(row.name) %>%
     pivot_longer(-row.name, names_to = col.name, values_to = val.name) %>% 
     mutate("{col.name}" := str_remove(!!sym(col.name), "V")) %>% 
-    # mutate(across(starts_with("t_"), ~(10*(as.numeric(.)-1)-700))) %>% 
+    mutate_all(as.numeric) %>% 
     return
 }
 ```
@@ -66,7 +67,7 @@ plot.base <- function(df.plot,
   df.plot %>% 
     ggplot(aes(x = t_test, y = t_train)) +
     # facet_grid(direction ~ manip) +
-    geom_tile(aes(fill = value)) +
+    geom_tile(aes(fill = accuracy)) +
     geom_vline(xintercept = lines.v.pos, linetype = 2, color = col.lines) +
     geom_hline(yintercept = lines.h.pos, linetype = 2, color = col.lines) +
     geom_vline(xintercept = 0, color = col.lines) +
@@ -138,7 +139,7 @@ load_loop_subj <- function(folder, condition, group.mean = T, diag = F) {
   if (group.mean) {
     array.scores %>% 
       apply(c(1,2), mean) %>%
-      matrix_to_df %>% 
+      matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
       return
   # --- or participant-level data, with a subject identifier column
   } else {
@@ -146,7 +147,7 @@ load_loop_subj <- function(folder, condition, group.mean = T, diag = F) {
       df.out <- tibble()
       for (i in 1:n.subj) {
         df.out %<>% bind_rows(
-          array.scores %>%
+          array.scores[,,i] %>%
             matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>%
             filter(t_train == t_test) %>% mutate(id = list.subj[[i]])
         )
@@ -229,7 +230,6 @@ for (condition in c("RD","MM","MP","OR")) {
 }
 
 df.plot %<>%
-  mutate(across(c(from,to), as.numeric)) %>% 
   mutate(condition = factor(condition, names(mat.T)))
 ```
 
@@ -259,6 +259,8 @@ g.pitch
 ```
 
 ```{r}
+#| eval: false
+#| include: false
 #| fig-width: 1
 #| fig-height: 2
 df.plot.pitch <- tibble(pitch = c(200,430,928,2000))
@@ -346,12 +348,12 @@ g %>%
 ```{r}
 #| cache: true
 
-df.fig2.stim <- tibble()
+df.stim <- tibble()
 for (manip in c("","_reord")) { 
   
   for (direction in c("rd_to_rd", "rd_to_mm", "rd_to_mp", "rd_to_or")) {
     
-    df.fig2.stim %<>% bind_rows(
+    df.stim %<>% bind_rows(
       load_loop_subj(folder = "reorder_random",
                      condition = paste0(direction, manip)) %>% 
         mutate(manip = manip, direction = direction)
@@ -365,12 +367,12 @@ for (manip in c("","_reord")) {
 ```{r}
 #| cache: true
 
-df.fig2.omit <- tibble()
+df.omit <- tibble()
 for (manip in c("","_reord")) { 
   
   for (direction in c("rd_to_rd", "rd_to_mm", "rd_to_mp", "rd_to_or")) {
     
-    df.fig2.omit %<>% bind_rows(
+    df.omit %<>% bind_rows(
       load_loop_subj(folder = "reorder_random_omission",
                      condition = paste0(direction, manip)) %>% 
         mutate(manip = manip, direction = direction)
@@ -384,17 +386,20 @@ for (manip in c("","_reord")) {
 ```{r}
 
 # Combine SOUNDS & OMISSIONS
-df.plot <- bind_rows(df.fig2.stim %>% mutate(stim = "sounds"),
-                     df.fig2.omit %>% mutate(stim = "omissions")) %>% 
+df.plot <- bind_rows(df.stim %>% mutate(stim = "sounds"),
+                     df.omit %>% mutate(stim = "omissions")) %>% 
   mutate(direction = toupper(sub("rd_to_", "", direction)),
-         direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>% 
-  filter(t_train>=0, (t_train-333) < dt) # crop
+         direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>%
+  # --- convert indices to time
+  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>% 
+  # --- crop time
+  filter(t_train>=0, (t_train-333) < dt)
 
 # Calculate difference scores
 df.diff <- df.plot %>% 
   mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
-  pivot_wider(names_from = manip, values_from = value) %>%
-  mutate(value = original - reordered,
+  pivot_wider(names_from = manip, values_from = accuracy) %>%
+  mutate(accuracy = original - reordered,
          manip = toupper("original - reordered"))
 
 # Onset lines
@@ -444,7 +449,7 @@ for (s in c("sounds","omissions")) {
 
 g
 
-g %>% #)) %>%
+g %>%
   ggsave(filename = "./figures/fig2.png", width = 8, height = 7.5, dpi = 300, device = ragg::agg_png)
 ```
 
@@ -511,19 +516,19 @@ for (condition in names(mat.T)) {
     # Theoretical results for stimulus "S minus 2"
     bind_rows(mat.C.mean %>%
                 apply(c(1,2), null_accuracy, mat.transition = mat.T[[condition]]%^%2) %>%
-                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "value") %>% 
+                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
                 mutate(condition = condition, stimulus = "S-2")
               ) %>% 
     # Theoretical results for stimulus "S minus 1"
     bind_rows(mat.C.mean %>%
                 apply(c(1,2), null_accuracy, mat.transition = mat.T[[condition]]%^%1) %>%
-                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "value") %>% 
+                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
                 mutate(condition = condition, stimulus = "S-1")
               ) %>% 
     # Theoretical results for stimulus "S+1"
     bind_rows(mat.C.mean %>%
                 apply(c(1,2), null_accuracy, mat.transition = t(mat.T[[condition]])) %>%
-                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "value") %>% 
+                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
                 mutate(condition = condition, stimulus = "S+1")
               )
 }
@@ -534,7 +539,7 @@ for (condition in names(mat.T)) {
 ```{r}
 
 df.plot <- df.maths.all %>% 
-  mutate(across(starts_with("t_"), ~dt*(as.numeric(.)-1))) %>% 
+  mutate(across(starts_with("t_"), ~dt*(.-1))) %>% 
   mutate(t_test = t_test + 330*as.numeric(str_remove(stimulus,"S"))) %>%
   mutate(condition = factor(condition, levels = rev(names(mat.T))),
          stimulus = factor(stimulus, levels = c("S-2", "S-1", "S+1")))
@@ -567,12 +572,12 @@ g %>%
 ```{r}
 #| cache: true
 
-df.fig4.stim <- tibble()
+df.sp <- tibble()
 for (manip in c("","_reord")) { 
   
   for (direction in c("rd_to_mm", "rd_to_mp", "rd_to_or")) {
     
-    df.fig4.stim %<>% bind_rows(
+    df.sp %<>% bind_rows(
       load_loop_subj(folder = "reorder_random",
                      condition = paste0(direction, "_sp", manip)) %>% 
         mutate(manip = manip, direction = direction)
@@ -585,23 +590,26 @@ for (manip in c("","_reord")) {
 
 ```{r}
 # Combine SOUNDS & OMISSIONS
-df.plot.sp <- df.fig4.stim %>% 
+df.plot.sp <- df.sp %>% 
   mutate(direction = toupper(sub("rd_to_", "", direction)),
          direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>% 
-  filter(t_train>=0, (t_train-333) < dt) # crop
+  # --- convert indices to time
+  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>% 
+  # --- crop time
+  filter(t_train>=0, (t_train-333) < dt)
 
 # Calculate difference scores
 df.diff.sp <- df.plot.sp %>% 
   mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
-  pivot_wider(names_from = manip, values_from = value) %>%
-  mutate(value = original - reordered,
+  pivot_wider(names_from = manip, values_from = accuracy) %>%
+  mutate(accuracy = original - reordered,
          manip = toupper("original - reordered"))
 
 # --- add average across entropy levels
 df.diff.sp %<>% bind_rows(
   df.diff.sp %>% 
     group_by(t_train, t_test) %>% 
-    summarise(value = mean(value, na.rm=T), .groups = "drop") %>% 
+    summarise(accuracy = mean(accuracy, na.rm=T), .groups = "drop") %>% 
     mutate(direction = "average of\n(MM,MP,OR)",
            manip = toupper("original - reordered"))
   ) %>% 
@@ -694,13 +702,15 @@ for (manip in c("","_reord")) {
 
 # Factorize & filter
 df.plot <- df.trainintest.2 %>% 
-  mutate(entropy = factor(toupper(entropy), levels = rev(names(mat.T)))) #
-  # filter(t_train == t_test) # keep diagonal only
+  mutate(entropy = factor(toupper(entropy), levels = rev(names(mat.T)))) %>% 
+  # --- convert indices to time
+  mutate(across(starts_with("t_"), ~(dt*(.-1)-700)))
+  
 
 # Add difference scores
 df.plot %<>% 
   mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
-  pivot_wider(names_from = manip, values_from = value) %>%
+  pivot_wider(names_from = manip, values_from = accuracy) %>%
   mutate(diff = original - reordered) %>% 
   pivot_longer(cols=c(original,reordered,diff),
                names_to = "manip", values_to = "accuracy") %>% 
@@ -708,10 +718,11 @@ df.plot %<>%
                                 diff = "original - reordered",)))
 
 # Calculate group mean & CIs
-df.plot %>%
+df.plot %<>%
   group_by(t_train, entropy, manip) %>% 
-  summarise(accuracy.ci = sd(accuracy)/sqrt(n.subj),
-            accuracy.mean = mean(accuracy))
+  summarise(accuracy.ci = sd(accuracy),
+            accuracy.mean = mean(accuracy),
+            .groups = "drop")
 ```
 
 ### Plot
@@ -721,37 +732,18 @@ This one trains on entropy data and tests on random-reordered:
 ```{r}
 
 df.plot %>% 
-  ggplot(aes(x = t_train, y = accuracy, color = entropy)) +
+  ggplot(aes(x = t_train, y = accuracy.mean, color = entropy, fill = entropy)) +
   facet_grid(manip ~ ., scales = "free_y") +
   geom_hline(data = tibble(manip = factor(c("original", "reordered", "original - reordered"),
                                           levels = levels(df.plot$manip)),
                            chance = c(.25, .25, 0)),
              aes(yintercept = chance)) +
-  # annotate(geom = "hline", yintercept = 0) +
-  geom_line()
-
-
-# Onset lines
-lines.color <- "grey40"
-lines.v.pos <- 330*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333), 1)
-lines.v.pos <- lines.v.pos[lines.v.pos!=0]
-lines.h.pos <- 330*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333), 1)
-lines.h.pos <- lines.h.pos[lines.h.pos!=0]
-```
-
-This one trains on random-reordered and tests on the same:
-
-```{r}
-
-df.plot %>% 
-  ggplot(aes(x = t_train, y = accuracy, color = entropy)) +
-  facet_grid(manip ~ ., scales = "free_y") +
-  geom_hline(data = tibble(manip = factor(c("original", "reordered", "original - reordered"),
-                                          levels = levels(df.plot$manip)),
-                           chance = c(.25, .25, 0)),
-             aes(yintercept = chance)) +
-  # annotate(geom = "hline", yintercept = 0) +
-  geom_line()
+  geom_ribbon(aes(ymin = accuracy.mean-accuracy.ci, ymax = accuracy.mean+accuracy.ci),
+              color = NA,
+              alpha = 0.3) +
+  geom_line() +
+  geom_vline(xintercept = 0, color = lines.color) +
+  geom_vline(xintercept = 333*c(-2,-1,1,2), linetype = 2, color = lines.color)
 ```
 
 ### 
@@ -764,15 +756,14 @@ df.plot %>%
 df.confusion <- tibble()
 for (i in 1:dim(mat.C.mean)[1]) {
   df.confusion %<>% bind_rows(
-    mat.C.mean[i,i,,] %>% matrix_to_df2("from", "to", "value") %>% mutate(t = i)
+    mat.C.mean[i,i,,] %>% matrix_to_df2("from", "to", "p") %>% mutate(t = i)
   )
 }
 
 df.confusion %>% 
   mutate(t = dt*(t-1)) %>% 
   filter(t%%30==0) %>% 
-  mutate(across(c(from,to), as.numeric)) %>% 
-  ggplot(aes(x = to, y = from, fill = value)) +
+  ggplot(aes(x = to, y = from, fill = p)) +
   facet_wrap(~ t, ncol = 6, labeller = label_both, strip.position = "bottom") +
   geom_tile() + 
   scale_x_continuous(name = "predicted class", position = "top") +
