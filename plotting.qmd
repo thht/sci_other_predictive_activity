@@ -216,28 +216,12 @@ acc.labels.diff <- format_labels_acc(acc.breaks.diff)
 
 ## Figure 1
 
-### Prepare data
-
-```{r}
-
-df.plot <- tibble()
-for (condition in c("RD","MM","MP","OR")) {
-  df.plot %<>% bind_rows(
-    mat.T[[condition]] %>% 
-      matrix_to_df2(row.name = "from", col.name = "to", val.name = "p") %>% 
-      mutate(condition = condition)
-  )  
-}
-
-df.plot %<>%
-  mutate(condition = factor(condition, names(mat.T)))
-```
-
-### Plot
+### Pitches
 
 ```{r}
 #| fig-width: 1
 #| fig-height: 2
+#| output: false
 df.plot.pitch <- tibble(pitch = c(200,430,928,2000))
 
 df.plot.pitch %>% 
@@ -260,7 +244,6 @@ g.pitch
 
 ```{r}
 #| eval: false
-#| include: false
 #| fig-width: 1
 #| fig-height: 2
 df.plot.pitch <- tibble(pitch = c(200,430,928,2000))
@@ -287,7 +270,24 @@ g.pitch2
 
 ```
 
+### Transition matrices
+
 ```{r}
+#| output: false
+
+# Convert & combine transition matrices into a dataframe
+df.plot <- tibble()
+for (condition in c("RD","MM","MP","OR")) {
+  df.plot %<>% bind_rows(
+    mat.T[[condition]] %>% 
+      matrix_to_df2(row.name = "from", col.name = "to", val.name = "p") %>% 
+      mutate(condition = condition)
+  )  
+}
+df.plot %<>%
+  mutate(condition = factor(condition, names(mat.T)))
+
+# Plot
 df.plot %>% 
   ggplot(aes(x = to, y = from)) +
   facet_wrap(~ condition, nrow = 1, strip.position = "bottom") +
@@ -317,7 +317,7 @@ df.plot %>%
   coord_equal(xlim = c(0.5,4.5), ylim = rev(c(0.5,4.5)),
               expand = F, clip = "off") +
   theme(legend.position = "bottom",
-        legend.box.margin = margin(t = -10),
+        legend.box.margin = margin(t = -20),
         # text size
         axis.title = element_text(size = 9),
         legend.title = element_text(size = 9),
@@ -327,18 +327,135 @@ df.plot %>%
         # Positions & margins
         axis.title.x = element_text(hjust = 0.08),
         panel.spacing.x = unit(0.8,"cm")) -> g.transitions
+```
 
-# wrap_elements(full = g.pitch) 
-g.pitch + plot_spacer() + g.transitions + 
-  plot_layout(widths = c(0.5,0.2,15)) +
+### Reordering
+
+```{r}
+#| output: false
+
+# Generate Markov sequences
+n.samples <- 12
+stims <- list(RD = c(), OR = c())
+set.seed(128764) #20476, 99713
+for (entropy in c("RD","OR")) {
+  stims[[entropy]] <- vector("numeric", n.samples)
+  stims[[entropy]][1] <- sample(1:4, 1)
+  for (i in 2:n.samples) {
+    stims[[entropy]][i] <- sample(1:4, 1, prob = mat.T[[entropy]][stims[[entropy]][i-1],])
+  }
+}
+
+# Add global sequence indices, class-specific indices and offset according to pitch
+df.plot <- stims %>% as.tibble() %>% 
+  mutate(idx = as.double(1:n.samples)) %>% 
+  pivot_longer(-idx, names_to = "entropy", values_to = "class") %>% 
+  mutate(entropy = factor(entropy, levels = c("OR","RD"))) %>%
+  group_by(entropy,class) %>% mutate(rank = rank(idx)) %>% 
+  mutate(y = as.double(entropy) + class/16-10/64)
+
+# Plot
+df.plot %>% 
+  ggplot(aes(x = idx, y = y, color = class)) +
+  ggh4x::geom_pointpath(data = df.plot %>% arrange(desc(entropy)),
+               aes(x = idx, y = y, group = interaction(class,rank)),
+               mult = 0.4, color = "black", linewidth = 0.3,
+               arrow = arrow(length=unit(.2, 'cm'))) +
+  geom_point(size = 4, show.legend = F) +
+  geom_text(aes(label = rank), size = 2, color = "white") +
+  scale_x_continuous(name = "sequence index", breaks = 1:n.samples) +
+  scale_y_continuous(breaks = c(1,2), labels = c("OR","RD"), position = "left") +
+  scale_color_viridis_c() +
+  coord_cartesian(clip = "off") +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_text(size = 12, color = "black"),
+        axis.title.x = element_text(size = 9, color = "black"),
+        panel.grid = element_blank(),
+        panel.grid.major.x = element_line(color = "grey80", linewidth = 0.2)) -> g.reordering
+
+g.reordering
+```
+
+### Prediction types
+
+Presented vs. most likely
+
+```{r}
+#| output: false
+
+# Generate Markov sequences
+n.samples <- 6
+stims <- mat.T
+set.seed(62498) #128764
+for (entropy in names(stims)) {
+  stims[[entropy]] <- vector("numeric", n.samples)
+  stims[[entropy]][1] <- 4#sample(1:4, 1)
+  for (i in 2:n.samples) {
+    stims[[entropy]][i] <- sample(1:4, 1, prob = mat.T[[entropy]][stims[[entropy]][i-1],])
+  }
+}
+
+# Add sequence index & predictions
+df.plot <- stims %>% as.tibble() %>% 
+  mutate(idx = as.double(1:n.samples)) %>% 
+  pivot_longer(-idx, names_to = "entropy", values_to = "class") %>% 
+  mutate(entropy = factor(entropy, levels = names(stims))) %>% 
+  group_by(entropy) %>% mutate(actual = lead(class),
+                               mostlikely = ifelse(class==1, 4, class-1)) %>% 
+  pivot_longer(c(actual,mostlikely), names_to = "prediction", values_to = "class.pred")
+
+# Plot
+df.plot %>% 
+  ggplot(aes(x = idx, y = class)) +
+  facet_wrap(~ entropy, nrow = 2, strip.position = "right") +
+  geom_point(aes(fill = class), size = 2, shape = 21, show.legend = F) +
+  geom_point(data = df.plot %>% filter(prediction == "mostlikely", idx != n.samples),
+             aes(x = idx+1, y = class.pred), size = 2, shape = 8) +
+  scale_x_continuous(name = "sequence index", breaks = 1:n.samples) +
+  scale_y_continuous(name = "") +
+  scale_fill_viridis_c() +
+  coord_cartesian(clip = "off") +
+  expand_limits(x = c(0.9,6.1), y = c(0.3,4.7)) +
+  theme(panel.border = element_rect(fill=NA),
+        axis.text.y = element_blank(),
+        axis.title.x = element_text(size = 9, color = "black"),
+        strip.text = element_text(size = 12),
+        panel.spacing = unit(0.2,"cm"),
+        panel.grid = element_blank()) -> g.mostlikely
+
+g.mostlikely
+```
+
+### Assemble
+
+**Figure 1.** Original experimental design and reanalyses. **(a)** Demarchi et al. (2019) presented four different pure sinusoidal tones, logarithmically spaced in pitch. **(b)** Four types of sequences of sounds were generated, each using a Markov chain characterized by a distinct transition matrix. The transition matrices were manipulated so that (i) probabilities of repetitions (diagonal elements) were the same across sounds and sequences, (ii) the identity of the most likely next sound was the same in all sequences, and (iii) the entropy of the generated sequences decreased from RD (random) to MM (midminus), to MP (midplus) to OR (ordered). **(c)** In our reanalysis, we created a new control dataset by reordering epochs from randomly sequences according to the sequence order of higher entropy conditions (here, OR). By construction, any above chance level decoding accuracy on this control dataset could only be attributed to sequence effects and not to brain representations. (d) Demarchi et al. (2019) decoded the sound that was actually presented to the participants (colored circles), which was not always the most likely one given the previous stimulus (asterisks); the lower the entropy, the more discrepancy between the two. In our reanalysis, we decoded both types of prediction.
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4.5
+#| column: page
+
+((g.pitch + labs(title = "")) +
+    plot_spacer() +
+    (g.transitions + labs(title = "Transition matrices")) +
+    plot_layout(widths = c(0.5,0.2,15))) / (
+wrap_elements(full = g.reordering + labs(title="Reordering of random data")) +
+   plot_spacer() +
+   (g.mostlikely + labs(title="Predictions")) +
+  plot_layout(widths = c(1,0.05,1))
+) + 
+  plot_layout(heights = c(1.4,1)) +
   plot_annotation(tag_levels = "a") &
-  theme(plot.tag.position = c(0, 1),
+  
+  theme(plot.title = element_text(size = 12),
+        plot.title.position = "panel",
+        plot.tag.position = c(0, 1),
         plot.tag = element_text(size = 14, hjust = 0, vjust = 1, face = "bold")) -> g
 
 g
 
 g %>%
-  ggsave(filename = "./figures/fig1.png", width = 8, height = 2.8, dpi = 300, device = ragg::agg_png)
+  ggsave(filename = "./figures/fig1.png", width = 8, height = 4.5, dpi = 300, device = ragg::agg_png)
 ```
 
 ## Figure 2
@@ -415,6 +532,8 @@ lines.h.pos <- lines.h.pos[lines.h.pos!=0]
 ```{r}
 #| fig-width: 8
 #| fig-height: 7
+#| column: page
+
 g.base <- list(sound = c(), omission = c())
 g.diff <- list(sound = c(), omission = c())
 
@@ -537,6 +656,9 @@ for (condition in names(mat.T)) {
 ### Plot
 
 ```{r}
+#| column: page
+#| fig-width: 8
+#| fig-height: 4
 
 df.plot <- df.maths.all %>% 
   mutate(across(starts_with("t_"), ~dt*(.-1))) %>% 
@@ -628,6 +750,7 @@ lines.h.pos <- lines.h.pos[lines.h.pos!=0]
 ```{r}
 #| fig-width: 8
 #| fig-height: 3
+#| column: page
 
 # ORIGINAL & REORDERED
 df.plot.sp %>% 
@@ -730,6 +853,8 @@ df.plot %<>%
 This one trains on entropy data and tests on random-reordered:
 
 ```{r}
+#| column: page
+
 
 df.plot %>% 
   ggplot(aes(x = t_train, y = accuracy.mean, color = entropy, fill = entropy)) +
@@ -753,6 +878,10 @@ df.plot %>%
 ## Confusion matrices
 
 ```{r}
+#| column: page
+#| fig-width: 6
+#| fig-height: 2
+
 df.confusion <- tibble()
 for (i in 1:dim(mat.C.mean)[1]) {
   df.confusion %<>% bind_rows(
