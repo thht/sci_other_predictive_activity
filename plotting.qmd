@@ -1,0 +1,789 @@
+---
+title: "Reanalysis of Demarchi et al. (2019)"
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+editor: visual
+bibliography: references.bib
+---
+
+# Prepare
+
+## Libraries
+
+```{r}
+library(patchwork)
+library(magrittr)
+library(tidyverse)
+
+library(reticulate)
+np <- import("numpy")
+os <- import("os")
+
+theme_set(theme_minimal())
+theme_update(text = element_text(family = "Arial"))
+
+path.root <- "./data/results"
+list.subj <- list.dirs(path.root, full.names = F, recursive = F)
+n.subj <- length(list.subj)
+```
+
+## Functions
+
+### Matrix to df
+
+```{r}
+matrix_to_df <- function(array, row.name = "t_train", col.name = "t_test", val.name = "value") {
+  array %>% 
+    as_tibble() %>%
+    rownames_to_column("t_train") %>%
+    pivot_longer(-t_train, names_to = "t_test", values_to = "value") %>% 
+    mutate(t_test = str_remove(t_test, "V")) %>% 
+    mutate(across(starts_with("t_"), ~(10*(as.numeric(.)-1)-700))) %>% 
+    return
+}
+
+matrix_to_df2 <- function(array, row.name, col.name, val.name) {
+  array %>% 
+    as_tibble() %>%
+    rownames_to_column(row.name) %>%
+    pivot_longer(-row.name, names_to = col.name, values_to = val.name) %>% 
+    mutate("{col.name}" := str_remove(!!sym(col.name), "V")) %>% 
+    # mutate(across(starts_with("t_"), ~(10*(as.numeric(.)-1)-700))) %>% 
+    return
+}
+```
+
+### Base plot
+
+```{r}
+plot.base <- function(df.plot,
+                      col.pal = rev(pals::brewer.rdbu(10)),
+                      col.lines = "grey40",
+                      acc.breaks = acc.breaks.base, acc.labels = acc.labels.base) {
+  df.plot %>% 
+    ggplot(aes(x = t_test, y = t_train)) +
+    # facet_grid(direction ~ manip) +
+    geom_tile(aes(fill = value)) +
+    geom_vline(xintercept = lines.v.pos, linetype = 2, color = col.lines) +
+    geom_hline(yintercept = lines.h.pos, linetype = 2, color = col.lines) +
+    geom_vline(xintercept = 0, color = col.lines) +
+    geom_hline(yintercept = 0, color = col.lines) +
+    
+    scale_x_continuous(name = "Test time (ms)",
+                       breaks = scales::pretty_breaks(10),
+                       expand = c(0,0)) +
+    scale_y_continuous(name = "Train time (ms)",
+                       breaks = scales::pretty_breaks(10),
+                       expand = c(0,0)) +
+    scale_fill_stepsn(name = "Accuracy",
+                      colors = col.pal,
+                      breaks = acc.breaks,
+                      labels = acc.labels,
+                      limits = c(min(acc.breaks), max(acc.breaks)),
+                      oob = scales::squish) +
+    coord_equal() +
+    guides(fill = guide_colorbar(barwidth = 0.5*length(acc.breaks-1), barheight = 0.5,
+                                 ticks = F, title.vjust = 1)) +
+    theme(# Text size
+          plot.title = element_text(size = 12, hjust = 0.5, face = "bold"),
+          plot.subtitle = element_text(size = 9, hjust = 0.5),
+          axis.title = element_text(size = 9),
+          legend.title = element_text(size = 9),
+          strip.text = element_text(size = 9),
+          axis.text = element_text(size = 5),
+          legend.text = element_text(size = 5.5),
+          # Time ticks
+          axis.ticks = element_line(color = "black"),
+          axis.ticks.length = unit(0.1, "cm"),
+          # Legend
+          legend.position = "bottom",
+          legend.box.margin = margin(0,0,0,0),
+          legend.box.spacing = unit(0, "pt"),
+          # no grid
+          panel.grid = element_blank()) %>% 
+    return
+}
+```
+
+### Load data
+
+```{r}
+load_loop_subj <- function(folder, condition, group.mean = T, diag = F) {
+  array.scores <- array(dim = c(141,141,n.subj))
+  i <- 1
+  for (s in list.subj) {
+    tmp <- os$path$join(path.root, s, folder,
+                        paste0("cv_", condition, "_scores.npy"))
+    
+    # Proceed to next subject if file doesn't exist
+    if (!os$path$isfile(tmp)) {next}
+    
+    # Load data otherwise
+    tmp <- np$load(tmp)
+    
+    # Average across CV folds if present
+    if (length(dim(tmp)) == 3) {
+      tmp <- tmp %>% apply(c(2,3), mean) # average across CV folds
+    }
+      
+    array.scores[,,i] <- tmp
+    i <- i+1
+  }
+  
+  # Return a dataframe
+  # --- average across participants if requested (default)
+  if (group.mean) {
+    array.scores %>% 
+      apply(c(1,2), mean) %>%
+      matrix_to_df %>% 
+      return
+  # --- or participant-level data, with a subject identifier column
+  } else {
+    if (diag) {
+      df.out <- tibble()
+      for (i in 1:n.subj) {
+        df.out %<>% bind_rows(
+          array.scores %>%
+            matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>%
+            filter(t_train == t_test) %>% mutate(id = list.subj[[i]])
+        )
+      }
+    }
+    return(df.out)
+  } 
+}
+```
+
+## Parameters
+
+### Transition matrices
+
+From @demarchi2019
+
+```{r}
+
+mat.T <- list(RD = matrix(rep(.25, 16), ncol = 4, byrow = T),
+              MM = matrix(), MP = matrix(), OR = matrix())
+
+mat.T$MM <- matrix(c(c(.25,0,.375,.375),
+                     c(.375,.25,0,.375),
+                     c(.375,.375,.25,0),
+                     c(0,.375,.375,.25)),
+                   ncol = 4, byrow = T)
+
+mat.T$MP <- matrix(c(c(.25,0,.15,.60),
+                     c(.60,.25,0,.15),
+                     c(.15,.60,.25,0),
+                     c(0,.15,.60,.25)),
+                   ncol = 4, byrow = T)
+
+mat.T$OR <- matrix(c(c(.25,0,0,.75),
+                     c(.75,.25,0,0),
+                     c(0,.75,.25,0),
+                     c(0,0,.75,.25)),
+                   ncol = 4, byrow = T)
+```
+
+### Plotting
+
+```{r}
+# Temporal resolution in ms (1000 / sampling frequency)
+dt <- 10
+
+# Colors
+col.pal.base <- rev(pals::brewer.rdbu(10))
+col.pal.diff <- rev(pals::brewer.brbg(10))
+
+# Breaks & Labels
+# --- function
+format_labels_acc <- function(labels) {
+  labels[seq(2,length(labels),2)] <- ""
+  labels <- str_replace(labels, "0.", ".")
+}
+# --- base
+acc.breaks.base <- seq(.21,.29, .005)
+acc.labels.base <- format_labels_acc(acc.breaks.base)
+# --- diff
+acc.breaks.diff <- seq(-.02,.02, .005)
+acc.labels.diff <- format_labels_acc(acc.breaks.diff)
+```
+
+# Figures
+
+## Figure 1
+
+### Prepare data
+
+```{r}
+
+df.plot <- tibble()
+for (condition in c("RD","MM","MP","OR")) {
+  df.plot %<>% bind_rows(
+    mat.T[[condition]] %>% 
+      matrix_to_df2(row.name = "from", col.name = "to", val.name = "p") %>% 
+      mutate(condition = condition)
+  )  
+}
+
+df.plot %<>%
+  mutate(across(c(from,to), as.numeric)) %>% 
+  mutate(condition = factor(condition, names(mat.T)))
+```
+
+### Plot
+
+```{r}
+#| fig-width: 1
+#| fig-height: 2
+df.plot.pitch <- tibble(pitch = c(200,430,928,2000))
+
+df.plot.pitch %>% 
+  ggplot(aes(x = 1, y = pitch, color = (pitch))) +
+  geom_point(size = 4, show.legend = F) +
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(name = "Pitch (Hz)",
+                     breaks = df.plot.pitch$pitch) +
+  scale_color_viridis_c(name = "Pitch (Hz)",
+                        breaks = (df.plot.pitch$pitch),
+                        trans = "log") +
+  coord_cartesian(clip = "off") +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        panel.grid = element_blank(),
+        panel.grid.major.y = element_line()) -> g.pitch
+
+g.pitch
+```
+
+```{r}
+#| fig-width: 1
+#| fig-height: 2
+df.plot.pitch <- tibble(pitch = c(200,430,928,2000))
+
+df.plot.pitch %>% 
+  ggplot(aes(x = 1, y = pitch, color = (pitch))) +
+  geom_point(size = 6) +
+  scale_x_continuous(expand = c(0,0)) +
+  scale_color_viridis_c(name = "Pitch (Hz)",
+                        breaks = (df.plot.pitch$pitch),
+                        trans = "log") +
+  guides(color = guide_colorbar(title.hjust = 1,
+                                label.position = "left",
+                                label.vjust = c(0,0.5,0.5,1),
+                                barwidth = 0.5, barheight = 8)) +
+  coord_trans(y = scales::log_trans(),
+              ylim = c(200/2.15, 2000*2.15),
+              clip = "off") +
+  theme_void() +
+  theme(legend.position = "left",
+        legend.box.margin = margin(b = 15, r=-20)) -> g.pitch2
+
+g.pitch2
+
+```
+
+```{r}
+df.plot %>% 
+  ggplot(aes(x = to, y = from)) +
+  facet_wrap(~ condition, nrow = 1, strip.position = "bottom") +
+  # --- heatmap
+  geom_tile(aes(fill = p)) +
+  # --- display percentages
+  geom_text(data = . %>% filter(p<=.25),
+            aes(label = paste0(100*p,"%")),
+            color = "black", size = 2) +
+  geom_text(data = . %>% filter(p>.25),
+            aes(label = paste0(100*p,"%")),
+            color = "white", size = 2) +
+  # --- display color-coded pitch in axes
+  geom_point(data = bind_rows(tibble(x = 0.1, y = 1:4, pitch = 1:4),
+                              tibble(y = 0.1, x = 1:4, pitch = 1:4)),
+             aes(x, y, color = pitch), size = 4, show.legend = FALSE) +
+  
+  scale_color_viridis_c() +
+  scale_x_continuous(name = "...to...\n", position = "top") +
+  scale_y_reverse(name = "from...\n") +
+  scale_fill_gradient(name = "transition probability",
+                      low = "white", high = "black",
+                      labels = ~str_replace(., "^0.","."),
+                      limits = c(0,1)) +
+  guides(fill = guide_colorbar(barheight = 0.5,
+                               ticks = F, title.vjust = 1)) +
+  coord_equal(xlim = c(0.5,4.5), ylim = rev(c(0.5,4.5)),
+              expand = F, clip = "off") +
+  theme(legend.position = "bottom",
+        legend.box.margin = margin(t = -10),
+        # text size
+        axis.title = element_text(size = 9),
+        legend.title = element_text(size = 9),
+        strip.text = element_text(size = 12),
+        # remove axis text
+        axis.text = element_blank(),
+        # Positions & margins
+        axis.title.x = element_text(hjust = 0.08),
+        panel.spacing.x = unit(0.8,"cm")) -> g.transitions
+
+# wrap_elements(full = g.pitch) 
+g.pitch + plot_spacer() + g.transitions + 
+  plot_layout(widths = c(0.5,0.2,15)) +
+  plot_annotation(tag_levels = "a") &
+  theme(plot.tag.position = c(0, 1),
+        plot.tag = element_text(size = 14, hjust = 0, vjust = 1, face = "bold")) -> g
+
+g
+
+g %>%
+  ggsave(filename = "./figures/fig1.png", width = 8, height = 2.8, dpi = 300, device = ragg::agg_png)
+```
+
+## Figure 2
+
+### Load stimulus data
+
+```{r}
+#| cache: true
+
+df.fig2.stim <- tibble()
+for (manip in c("","_reord")) { 
+  
+  for (direction in c("rd_to_rd", "rd_to_mm", "rd_to_mp", "rd_to_or")) {
+    
+    df.fig2.stim %<>% bind_rows(
+      load_loop_subj(folder = "reorder_random",
+                     condition = paste0(direction, manip)) %>% 
+        mutate(manip = manip, direction = direction)
+    )
+  }
+}
+```
+
+### Load omission data
+
+```{r}
+#| cache: true
+
+df.fig2.omit <- tibble()
+for (manip in c("","_reord")) { 
+  
+  for (direction in c("rd_to_rd", "rd_to_mm", "rd_to_mp", "rd_to_or")) {
+    
+    df.fig2.omit %<>% bind_rows(
+      load_loop_subj(folder = "reorder_random_omission",
+                     condition = paste0(direction, manip)) %>% 
+        mutate(manip = manip, direction = direction)
+    )
+  }
+}
+```
+
+### Prepare data
+
+```{r}
+
+# Combine SOUNDS & OMISSIONS
+df.plot <- bind_rows(df.fig2.stim %>% mutate(stim = "sounds"),
+                     df.fig2.omit %>% mutate(stim = "omissions")) %>% 
+  mutate(direction = toupper(sub("rd_to_", "", direction)),
+         direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>% 
+  filter(t_train>=0, (t_train-333) < dt) # crop
+
+# Calculate difference scores
+df.diff <- df.plot %>% 
+  mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
+  pivot_wider(names_from = manip, values_from = value) %>%
+  mutate(value = original - reordered,
+         manip = toupper("original - reordered"))
+
+# Onset lines
+lines.color <- "grey40"
+lines.v.pos <- 330*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333), 1)
+lines.v.pos <- lines.v.pos[lines.v.pos!=0]
+lines.h.pos <- 330*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333), 1)
+lines.h.pos <- lines.h.pos[lines.h.pos!=0]
+```
+
+### Plot
+
+```{r}
+#| fig-width: 8
+#| fig-height: 7
+g.base <- list(sound = c(), omission = c())
+g.diff <- list(sound = c(), omission = c())
+
+for (s in c("sounds","omissions")) {
+  # ORIGINAL & REORDERED
+  df.plot %>% 
+    filter(stim == s) %>% 
+    mutate(manip = case_match(manip, ""~"Test data: ORIGINAL",
+                              "_reord"~"Test data: RANDOM REORDERED")) %>% 
+    plot.base(col.pal = col.pal.base,
+              acc.breaks = acc.breaks.base,
+              acc.labels = acc.labels.base) +
+    facet_grid(direction ~ manip) +
+    labs(title = paste0(toupper(s), ", decoding presented")) -> g.base[[s]]
+  
+  # DIFFERENCE
+  df.diff %>%
+    filter(stim == s) %>% 
+    plot.base(col.pal = col.pal.diff,
+              acc.breaks = acc.breaks.diff,
+              acc.labels = acc.labels.diff) +
+    facet_grid(direction ~ manip) +
+    labs(title = toupper(s)) +
+    theme(axis.title.y = element_blank()) -> g.diff[[s]]
+}
+
+(g.base[["sounds"]] + g.diff[["sounds"]] + plot_layout(widths = c(2, 1))) /
+  (g.base[["omissions"]] + g.diff[["omissions"]] + plot_layout(widths = c(2, 1))) +
+  plot_annotation(tag_levels = c("a","b","c","d")) &
+  theme(plot.tag.position = c(0, 1),
+        plot.tag = element_text(size = 14, hjust = 0, vjust = 1)) -> g
+
+g
+
+g %>% #)) %>%
+  ggsave(filename = "./figures/fig2.png", width = 8, height = 7.5, dpi = 300, device = ragg::agg_png)
+```
+
+## Figure 3
+
+### Load confusion matrices
+
+```{r}
+#| cache: true
+
+null_accuracy <- function(mat.confusion, mat.transition) {
+  # Calculate accuracy under the null hypothesis from the transition and confusion matrices mat.T and mat.C
+  return(0.25 + sum(diag(cov(t(mat.transition), t(mat.confusion)))))
+}
+
+array.scores <- array(dim = c(34,136,n.subj))
+tmp.all <- array(dim = c(34,34,4,4,n.subj))
+i <- 1
+for (s in list.subj) {
+  
+  # --- load the confusion matrix
+  tmp.file <- os$path$join(path.root, s, "reorder_random",
+                      "rd_to_rd_confmats.npz") %>% np$load()
+  
+  # --- crop around S0 (decoded stimulus)
+  tmp <- tmp.file$f[["arr_0"]][,71:104,71:104,,] %>%
+    apply(c(2,3,4,5), mean)
+  
+  # tmp.file$close()
+  
+  # --- append to other subjects
+  tmp.all[,,,,i] <- tmp
+  
+  # NOTE: because the transition matrix is the same for all subjects, theoretical accuracy can be calculated from the group average of the confusion matrix (faster)
+  # # --- calculate theoretical accuracy
+  # #   --- for S-2
+  # array.scores[,1:34,i] <- tmp %>% 
+  #   apply(c(1,2), null_accuracy, mat.transition = mat.T.OR%^%2)
+  # #   --- for S-1
+  # array.scores[,35:68,i] <- tmp %>% 
+  #   apply(c(1,2), null_accuracy, mat.transition = mat.T.OR%^%1)
+    
+  i <- i+1
+}
+
+# Average individual theoretical accuracies
+# DEPRECATED: see note above
+# df.maths <- array.scores %>% 
+#   apply(c(1,2), mean) %>%
+#   matrix_to_df
+
+```
+
+### Calculate
+
+```{r}
+
+# Average across participants
+mat.C.mean <- tmp.all %>% apply(c(1,2,3,4), mean)
+
+df.maths.all <- tibble()
+for (condition in names(mat.T)) {
+  df.maths.all %<>%
+    # Theoretical results for stimulus "S minus 2"
+    bind_rows(mat.C.mean %>%
+                apply(c(1,2), null_accuracy, mat.transition = mat.T[[condition]]%^%2) %>%
+                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "value") %>% 
+                mutate(condition = condition, stimulus = "S-2")
+              ) %>% 
+    # Theoretical results for stimulus "S minus 1"
+    bind_rows(mat.C.mean %>%
+                apply(c(1,2), null_accuracy, mat.transition = mat.T[[condition]]%^%1) %>%
+                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "value") %>% 
+                mutate(condition = condition, stimulus = "S-1")
+              ) %>% 
+    # Theoretical results for stimulus "S+1"
+    bind_rows(mat.C.mean %>%
+                apply(c(1,2), null_accuracy, mat.transition = t(mat.T[[condition]])) %>%
+                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "value") %>% 
+                mutate(condition = condition, stimulus = "S+1")
+              )
+}
+```
+
+### Plot
+
+```{r}
+
+df.plot <- df.maths.all %>% 
+  mutate(across(starts_with("t_"), ~dt*(as.numeric(.)-1))) %>% 
+  mutate(t_test = t_test + 330*as.numeric(str_remove(stimulus,"S"))) %>%
+  mutate(condition = factor(condition, levels = rev(names(mat.T))),
+         stimulus = factor(stimulus, levels = c("S-2", "S-1", "S+1")))
+
+lines.color <- "grey40"
+lines.v.pos <- 330*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333), 1)
+lines.v.pos <- lines.v.pos[lines.v.pos!=0]
+lines.h.pos <- 330*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333), 1)
+lines.h.pos <- lines.h.pos[lines.h.pos!=0]
+
+
+df.plot %>% 
+  plot.base() +
+  facet_grid(condition ~ .) +
+  labs(title = "Theoretical decoding accuracy",
+       subtitle = "based on transition and confusion matrices") -> g
+
+g
+
+g %>% 
+   ggsave(filename = "./figures/fig3.png", width = 8, height = 4, dpi = 300, device = ragg::agg_png)
+```
+
+### 
+
+## Figure 4
+
+### Load data
+
+```{r}
+#| cache: true
+
+df.fig4.stim <- tibble()
+for (manip in c("","_reord")) { 
+  
+  for (direction in c("rd_to_mm", "rd_to_mp", "rd_to_or")) {
+    
+    df.fig4.stim %<>% bind_rows(
+      load_loop_subj(folder = "reorder_random",
+                     condition = paste0(direction, "_sp", manip)) %>% 
+        mutate(manip = manip, direction = direction)
+    )
+  }
+}
+```
+
+### Prepare data
+
+```{r}
+# Combine SOUNDS & OMISSIONS
+df.plot.sp <- df.fig4.stim %>% 
+  mutate(direction = toupper(sub("rd_to_", "", direction)),
+         direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>% 
+  filter(t_train>=0, (t_train-333) < dt) # crop
+
+# Calculate difference scores
+df.diff.sp <- df.plot.sp %>% 
+  mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
+  pivot_wider(names_from = manip, values_from = value) %>%
+  mutate(value = original - reordered,
+         manip = toupper("original - reordered"))
+
+# --- add average across entropy levels
+df.diff.sp %<>% bind_rows(
+  df.diff.sp %>% 
+    group_by(t_train, t_test) %>% 
+    summarise(value = mean(value, na.rm=T), .groups = "drop") %>% 
+    mutate(direction = "average of\n(MM,MP,OR)",
+           manip = toupper("original - reordered"))
+  ) %>% 
+  mutate(direction = factor(direction, levels = rev(c("average of\n(MM,MP,OR)","MM","MP","OR"))))
+
+# Onset lines
+lines.color <- "grey40"
+lines.v.pos <- 333*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333),1)
+lines.v.pos <- lines.v.pos[lines.v.pos!=0]
+lines.h.pos <- 333*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333),1)
+lines.h.pos <- lines.h.pos[lines.h.pos!=0]
+```
+
+### Plot
+
+```{r}
+#| fig-width: 8
+#| fig-height: 3
+
+# ORIGINAL & REORDERED
+df.plot.sp %>% 
+  mutate(manip = case_match(manip, ""~"Test data: ORIGINAL",
+                            "_reord"~"Test data: RANDOM REORDERED")) %>% 
+  plot.base(col.pal = col.pal.base,
+            acc.breaks = acc.breaks.base,
+            acc.labels = acc.labels.base) +
+  facet_grid(direction ~ manip) +
+  labs(title = paste0(toupper("sounds"), ", decoding most likely")) -> g.base
+
+# DIFFERENCE
+df.diff.sp %>%
+  plot.base(col.pal = col.pal.diff,
+            acc.breaks = acc.breaks.diff,
+            acc.labels = acc.labels.diff) +
+  facet_grid(direction ~ manip) +
+  labs(title = toupper("sounds")) +
+  theme(axis.title.y = element_blank(),
+        strip.text = element_text(vjust = 0)) -> g.diff
+
+# ASSEMBLE
+(g.base + g.diff + plot_layout(widths = c(2, 1))) +
+  plot_annotation(tag_levels = c("a","b")) &
+  theme(plot.tag.position = c(0, 1),
+        plot.tag = element_text(size = 14, hjust = 0, vjust = 1)) -> g
+
+g
+
+g %>% 
+   ggsave(filename = "./figures/fig4.png", width = 8, height = 4, dpi = 300, device = ragg::agg_png)
+```
+
+## Figure 5
+
+### Load data
+
+```{r}
+#| cache: true
+
+df.trainintest <- tibble()
+for (manip in c("","_reord")) { 
+  
+  for (entropy in tolower(names(mat.T))) {
+    
+    df.trainintest %<>% bind_rows(
+      load_loop_subj(folder = "reorder_random",
+                     condition = paste0(entropy,"_to_",entropy,manip)) %>% 
+        mutate(manip = manip, entropy = entropy)
+    )
+  }
+}
+
+df.trainintest.2 <- tibble()
+for (manip in c("","_reord")) { 
+  
+  for (entropy in tolower(names(mat.T))) {
+    
+    df.trainintest.2 %<>% bind_rows(
+      load_loop_subj(folder = "reorder_random",
+                     condition = paste0(entropy,manip,"_to_",entropy,manip),
+                     group.mean = FALSE, diag = TRUE) %>% 
+        mutate(manip = manip, entropy = entropy)
+    )
+  }
+}
+```
+
+### Prepare data
+
+```{r}
+
+# Factorize & filter
+df.plot <- df.trainintest.2 %>% 
+  mutate(entropy = factor(toupper(entropy), levels = rev(names(mat.T)))) #
+  # filter(t_train == t_test) # keep diagonal only
+
+# Add difference scores
+df.plot %<>% 
+  mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
+  pivot_wider(names_from = manip, values_from = value) %>%
+  mutate(diff = original - reordered) %>% 
+  pivot_longer(cols=c(original,reordered,diff),
+               names_to = "manip", values_to = "accuracy") %>% 
+  mutate(manip = (recode_factor(manip, original = "original", reordered = "reordered",
+                                diff = "original - reordered",)))
+
+# Calculate group mean & CIs
+df.plot %>%
+  group_by(t_train, entropy, manip) %>% 
+  summarise(accuracy.ci = sd(accuracy)/sqrt(n.subj),
+            accuracy.mean = mean(accuracy))
+```
+
+### Plot
+
+This one trains on entropy data and tests on random-reordered:
+
+```{r}
+
+df.plot %>% 
+  ggplot(aes(x = t_train, y = accuracy, color = entropy)) +
+  facet_grid(manip ~ ., scales = "free_y") +
+  geom_hline(data = tibble(manip = factor(c("original", "reordered", "original - reordered"),
+                                          levels = levels(df.plot$manip)),
+                           chance = c(.25, .25, 0)),
+             aes(yintercept = chance)) +
+  # annotate(geom = "hline", yintercept = 0) +
+  geom_line()
+
+
+# Onset lines
+lines.color <- "grey40"
+lines.v.pos <- 330*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333), 1)
+lines.v.pos <- lines.v.pos[lines.v.pos!=0]
+lines.h.pos <- 330*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333), 1)
+lines.h.pos <- lines.h.pos[lines.h.pos!=0]
+```
+
+This one trains on random-reordered and tests on the same:
+
+```{r}
+
+df.plot %>% 
+  ggplot(aes(x = t_train, y = accuracy, color = entropy)) +
+  facet_grid(manip ~ ., scales = "free_y") +
+  geom_hline(data = tibble(manip = factor(c("original", "reordered", "original - reordered"),
+                                          levels = levels(df.plot$manip)),
+                           chance = c(.25, .25, 0)),
+             aes(yintercept = chance)) +
+  # annotate(geom = "hline", yintercept = 0) +
+  geom_line()
+```
+
+### 
+
+# Supplementary figures
+
+## Confusion matrices
+
+```{r}
+df.confusion <- tibble()
+for (i in 1:dim(mat.C.mean)[1]) {
+  df.confusion %<>% bind_rows(
+    mat.C.mean[i,i,,] %>% matrix_to_df2("from", "to", "value") %>% mutate(t = i)
+  )
+}
+
+df.confusion %>% 
+  mutate(t = dt*(t-1)) %>% 
+  filter(t%%30==0) %>% 
+  mutate(across(c(from,to), as.numeric)) %>% 
+  ggplot(aes(x = to, y = from, fill = value)) +
+  facet_wrap(~ t, ncol = 6, labeller = label_both, strip.position = "bottom") +
+  geom_tile() + 
+  scale_x_continuous(name = "predicted class", position = "top") +
+  scale_y_reverse(name = "true class") +
+  scale_fill_gradient(name = "transition probability",
+                      low = "white", high = "black",
+                      labels = ~str_replace(., "^0.","."),
+                      limits = c(0.15,0.35), oob = scales::squish) +
+  guides(fill = guide_colorbar(barwidth = 0.5,
+                               ticks = F, title.vjust = 1)) +
+  coord_equal(xlim = c(0.5,4.5), ylim = rev(c(0.5,4.5)),
+              expand = F, clip = "off") +
+  theme()
+```
