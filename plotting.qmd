@@ -1,10 +1,17 @@
 ---
 title: "Reanalysis of Demarchi et al. (2019)"
+filters:
+   - lightbox
+lightbox:
+  match: auto
+  effect: none
 format: 
   html:
     toc: true
     toc-depth: 3
     code-fold: true
+    fig-align: center
+    
 editor: visual
 bibliography: references.bib
 ---
@@ -29,6 +36,8 @@ theme_update(text = element_text(family = "Arial"))
 path.root <- "./data/results"
 list.subj <- list.dirs(path.root, full.names = F, recursive = F)
 n.subj <- length(list.subj)
+
+save <- FALSE
 ```
 
 ## Functions
@@ -432,6 +441,8 @@ g.mostlikely
 #| fig-width: 8
 #| fig-height: 4.5
 #| column: page
+#| lightbox:
+#|   group: r-graph
 
 ((g.pitch + labs(title = "")) +
     plot_spacer() +
@@ -452,8 +463,9 @@ wrap_elements(full = g.reordering + labs(title="Reordering of random data")) +
 
 g
 
-g %>%
-  ggsave(filename = "./figures/fig1.png", width = 8, height = 4.5, dpi = 300, device = ragg::agg_png)
+if (save) {
+  g %>% ggsave(filename = "./figures/fig1.png", width = 8, height = 4.5, dpi = 300, device = ragg::agg_png)
+}
 ```
 
 **Figure 1.** Original experimental design and reanalyses. **(a)** Demarchi et al. (2019) presented four different pure sinusoidal tones, logarithmically spaced in pitch. **(b)** Four types of sequences of sounds were generated, each using a Markov chain characterized by a distinct transition matrix. The transition matrices were manipulated so that (i) probabilities of repetitions (diagonal elements) were the same across sounds and sequences, (ii) the identity of the most likely next sound was the same in all sequences, and (iii) the entropy of the generated sequences decreased from RD (random) to MM (midminus), to MP (midplus) to OR (ordered). **(c)** In our reanalysis, we created a new control dataset by reordering epochs from randomly sequences according to the sequence order of higher entropy conditions (here, OR). By construction, any above chance level decoding accuracy on this control dataset could only be attributed to sequence effects and not to brain representations. (d) Demarchi et al. (2019) decoded the sound that was actually presented to the participants (colored circles), which was not always the most likely one given the previous stimulus (asterisks); the lower the entropy, the more discrepancy between the two. In our reanalysis, we decoded both types of prediction.
@@ -533,6 +545,8 @@ lines.h.pos <- lines.h.pos[lines.h.pos!=0]
 #| fig-width: 8
 #| fig-height: 7
 #| column: page
+#| lightbox:
+#|   group: r-graph
 
 g.base <- list(sound = c(), omission = c())
 g.diff <- list(sound = c(), omission = c())
@@ -568,8 +582,9 @@ for (s in c("sounds","omissions")) {
 
 g
 
-g %>%
-  ggsave(filename = "./figures/fig2.png", width = 8, height = 7.5, dpi = 300, device = ragg::agg_png)
+if (save) {
+  g %>% ggsave(filename = "./figures/fig2.png", width = 8, height = 7.5, dpi = 300, device = ragg::agg_png)
+}
 ```
 
 ## Figure 3
@@ -656,9 +671,11 @@ for (condition in names(mat.T)) {
 ### Plot
 
 ```{r}
-#| column: page
 #| fig-width: 8
 #| fig-height: 4
+#| column: page
+#| lightbox:
+#|   group: r-graph
 
 df.plot <- df.maths.all %>% 
   mutate(across(starts_with("t_"), ~dt*(.-1))) %>% 
@@ -681,8 +698,9 @@ df.plot %>%
 
 g
 
-g %>% 
-   ggsave(filename = "./figures/fig3.png", width = 8, height = 4, dpi = 300, device = ragg::agg_png)
+if (save) {
+  g %>% ggsave(filename = "./figures/fig3.png", width = 8, height = 4, dpi = 300, device = ragg::agg_png)
+}
 ```
 
 ### 
@@ -751,6 +769,8 @@ lines.h.pos <- lines.h.pos[lines.h.pos!=0]
 #| fig-width: 8
 #| fig-height: 4
 #| column: page
+#| lightbox:
+#|   group: r-graph
 
 # ORIGINAL & REORDERED
 df.plot.sp %>% 
@@ -780,8 +800,9 @@ df.diff.sp %>%
 
 g
 
-g %>% 
-   ggsave(filename = "./figures/fig4.png", width = 8, height = 4, dpi = 300, device = ragg::agg_png)
+if (save) {
+  g %>% ggsave(filename = "./figures/fig4.png", width = 8, height = 4, dpi = 300, device = ragg::agg_png)
+}
 ```
 
 ## Figure 5
@@ -854,7 +875,8 @@ This one trains on entropy data and tests on random-reordered:
 
 ```{r}
 #| column: page
-
+#| lightbox:
+#|   group: r-graph
 
 df.plot %>% 
   ggplot(aes(x = t_train, y = accuracy.mean, color = entropy, fill = entropy)) +
@@ -878,9 +900,11 @@ df.plot %>%
 ## Confusion matrices
 
 ```{r}
-#| column: page
 #| fig-width: 6
 #| fig-height: 2
+#| column: page
+#| lightbox:
+#|   group: r-graph
 
 df.confusion <- tibble()
 for (i in 1:dim(mat.C.mean)[1]) {
