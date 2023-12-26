@@ -428,8 +428,6 @@ g.mostlikely
 
 ### Assemble
 
-**Figure 1.** Original experimental design and reanalyses. **(a)** Demarchi et al. (2019) presented four different pure sinusoidal tones, logarithmically spaced in pitch. **(b)** Four types of sequences of sounds were generated, each using a Markov chain characterized by a distinct transition matrix. The transition matrices were manipulated so that (i) probabilities of repetitions (diagonal elements) were the same across sounds and sequences, (ii) the identity of the most likely next sound was the same in all sequences, and (iii) the entropy of the generated sequences decreased from RD (random) to MM (midminus), to MP (midplus) to OR (ordered). **(c)** In our reanalysis, we created a new control dataset by reordering epochs from randomly sequences according to the sequence order of higher entropy conditions (here, OR). By construction, any above chance level decoding accuracy on this control dataset could only be attributed to sequence effects and not to brain representations. (d) Demarchi et al. (2019) decoded the sound that was actually presented to the participants (colored circles), which was not always the most likely one given the previous stimulus (asterisks); the lower the entropy, the more discrepancy between the two. In our reanalysis, we decoded both types of prediction.
-
 ```{r}
 #| fig-width: 8
 #| fig-height: 4.5
@@ -457,6 +455,8 @@ g
 g %>%
   ggsave(filename = "./figures/fig1.png", width = 8, height = 4.5, dpi = 300, device = ragg::agg_png)
 ```
+
+**Figure 1.** Original experimental design and reanalyses. **(a)** Demarchi et al. (2019) presented four different pure sinusoidal tones, logarithmically spaced in pitch. **(b)** Four types of sequences of sounds were generated, each using a Markov chain characterized by a distinct transition matrix. The transition matrices were manipulated so that (i) probabilities of repetitions (diagonal elements) were the same across sounds and sequences, (ii) the identity of the most likely next sound was the same in all sequences, and (iii) the entropy of the generated sequences decreased from RD (random) to MM (midminus), to MP (midplus) to OR (ordered). **(c)** In our reanalysis, we created a new control dataset by reordering epochs from randomly sequences according to the sequence order of higher entropy conditions (here, OR). By construction, any above chance level decoding accuracy on this control dataset could only be attributed to sequence effects and not to brain representations. (d) Demarchi et al. (2019) decoded the sound that was actually presented to the participants (colored circles), which was not always the most likely one given the previous stimulus (asterisks); the lower the entropy, the more discrepancy between the two. In our reanalysis, we decoded both types of prediction.
 
 ## Figure 2
 
@@ -564,7 +564,7 @@ for (s in c("sounds","omissions")) {
   (g.base[["omissions"]] + g.diff[["omissions"]] + plot_layout(widths = c(2, 1))) +
   plot_annotation(tag_levels = c("a","b","c","d")) &
   theme(plot.tag.position = c(0, 1),
-        plot.tag = element_text(size = 14, hjust = 0, vjust = 1)) -> g
+        plot.tag = element_text(size = 14, hjust = 0, vjust = 1, face = "bold")) -> g
 
 g
 
@@ -749,7 +749,7 @@ lines.h.pos <- lines.h.pos[lines.h.pos!=0]
 
 ```{r}
 #| fig-width: 8
-#| fig-height: 3
+#| fig-height: 4
 #| column: page
 
 # ORIGINAL & REORDERED
@@ -776,7 +776,7 @@ df.diff.sp %>%
 (g.base + g.diff + plot_layout(widths = c(2, 1))) +
   plot_annotation(tag_levels = c("a","b")) &
   theme(plot.tag.position = c(0, 1),
-        plot.tag = element_text(size = 14, hjust = 0, vjust = 1)) -> g
+        plot.tag = element_text(size = 14, hjust = 0, vjust = 1, face = "bold")) -> g
 
 g
 
