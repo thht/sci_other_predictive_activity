@@ -115,7 +115,7 @@ load_loop_subj <- function(folder, condition, group.mean = T, diag = F) {
   }
   
   # Crop subject-level data for cluster analysis
-  array.scores <- array.scores[70:nrow(array.scores),,]
+  # array.scores <- array.scores[70:nrow(array.scores),,]
   return(list(array.scores, df.out))
 }
 ```
@@ -146,7 +146,7 @@ get_signif_clust2d <- function(X, n_permutations = 2**12, n_jobs = -1) {
 
 # Loop through multiple conditions, stored in a dataframe where each row contains a 2D array in an "array" column
 # Other columns are appended to the output as descriptors of the condition
-cluster_loop_cond <- function(df, H0 = 0.25, n_permutations = 2**12, n_jobs = -1) {
+cluster_loop_cond <- function(df, H0 = 0, n_permutations = 2**12, n_jobs = -1) {
   # Initialize significant clusters dataframe
   df.clusters <- tibble()
   # Loop through all conditions
@@ -555,6 +555,9 @@ for (manip in c("","_reord")) {
     df.stim.mean %<>% bind_rows(tmp[[2]] %>% mutate(manip = manip, direction = direction))
   }
 }
+
+df.stim.mean %<>% mutate(stim = "sounds")
+df.stim.subj %<>% mutate(stim = "sounds") %>% mutate(array = map(array, .f=\(x){x-0.25}))
 ```
 
 ### Load omission data
@@ -575,46 +578,91 @@ for (manip in c("","_reord")) {
     df.omit.mean %<>% bind_rows(tmp[[2]] %>% mutate(manip = manip, direction = direction))
   }
 }
+
+df.omit.mean %<>% mutate(stim = "omissions")
+df.omit.subj %<>% mutate(stim = "omissions") %>% mutate(array = map(array, .f=\(x){x-0.25}))
 ```
 
 ### Clusters stats & diff
 
 ```{r}
 #| cache: true
-#| 
+
+calculate_diff <- function(df, f.map, values_to) {
+  df %>% 
+    mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
+    pivot_wider(names_from = manip, values_from = values_to) %>% 
+    mutate(diff = f.map(original, reordered, .f=\(x,y){x-y})) %>% 
+    pivot_longer(cols = c(original, reordered, diff), names_to = "manip", values_to = values_to)
+}
+
 # Cluster analysis
-# --- sounds
-df.clusters <- cluster_loop_cond(df.stim.subj, n_permutations = 2**5)
-df.stim.mean %<>% left_join(df.clusters %>% mutate(t_train = t_train + 69))
-# --- omissions
-df.clusters <- cluster_loop_cond(df.omit.subj, n_permutations = 2**5)
-df.omit.mean %<>% left_join(df.clusters %>% mutate(t_train = t_train + 69))
-# --- differences
-# df.diff.subj
+df.all.subj <- bind_rows(df.stim.subj, df.omit.subj) %>% 
+  calculate_diff(f.map = map2, values_to = "array") %>% 
+  cluster_loop_cond(n_permutations = 2**5)
 
-
-
-# Combine SOUNDS & OMISSIONS
-df.plot <- bind_rows(df.stim.mean %>% mutate(stim = "sounds"),
-                     df.omit.mean %>% mutate(stim = "omissions")) %>% 
+# Aggregate all data and clean
+df.plot <- bind_rows(df.stim.mean, df.omit.mean) %>%
+  calculate_diff(f.map = map2_dbl, values_to = "accuracy") %>% 
+  # --- append cluster significance
+  left_join(df.clusters.all) %>%
+  mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
+                                diff = "ORIGINAL - REORDERED"))) %>% 
   mutate(direction = toupper(sub("rd_to_", "", direction)),
          direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>%
   # --- convert indices to time
-  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>% 
+  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
   # --- crop time
   filter(t_train>=0, (t_train-333) < dt)
-
-# Calculate difference scores
-df.diff <- df.plot %>% 
-  mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
-  pivot_wider(names_from = manip, values_from = accuracy) %>%
-  mutate(accuracy = original - reordered,
-         manip = toupper("original - reordered"))
-
 
 ```
 
 ### Plot
+
+```{r}
+#| fig-width: 8
+#| fig-height: 7
+#| column: page
+#| lightbox:
+#|   group: r-graph
+
+g.base <- list(sound = c(), omission = c())
+g.diff <- list(sound = c(), omission = c())
+
+for (s in c("sounds","omissions")) {
+  # ORIGINAL & REORDERED
+  df.plot %>% 
+    filter(stim == s, manip != "ORIGINAL - REORDERED") %>% 
+    mutate(manip = paste0("Test data: ", manip)) %>% 
+    plot.base(col.pal = col.pal.base,
+              acc.breaks = acc.breaks.base,
+              acc.labels = acc.labels.base) +
+    facet_grid(direction ~ manip) +
+    labs(title = paste0(toupper(s), ", decoding presented")) -> g.base[[s]]
+  
+  # DIFFERENCE
+  df.plot %>%
+    filter(stim == s, manip == "ORIGINAL - REORDERED") %>% 
+    plot.base(col.pal = col.pal.diff,
+              acc.breaks = acc.breaks.diff,
+              acc.labels = acc.labels.diff) +
+    facet_grid(direction ~ manip) +
+    labs(title = toupper(s)) +
+    theme(axis.title.y = element_blank()) -> g.diff[[s]]
+}
+
+(g.base[["sounds"]] + g.diff[["sounds"]] + plot_layout(widths = c(2, 1))) /
+  (g.base[["omissions"]] + g.diff[["omissions"]] + plot_layout(widths = c(2, 1))) +
+  plot_annotation(tag_levels = c("a","b","c","d")) &
+  theme(plot.tag.position = c(0, 1),
+        plot.tag = element_text(size = 14, hjust = 0, vjust = 1, face = "bold")) -> g
+
+g
+
+if (save) {
+  g %>% ggsave(filename = "./figures/fig2.png", width = 8, height = 7.5, dpi = 300, device = ragg::agg_png)
+}
+```
 
 ```{r}
 #| fig-width: 8
