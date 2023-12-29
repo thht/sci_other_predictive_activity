@@ -29,6 +29,7 @@ library(tidyverse)
 library(reticulate)
 np <- import("numpy")
 os <- import("os")
+mne <- import("mne")
 
 theme_set(theme_minimal())
 theme_update(text = element_text(family = "Arial"))
@@ -64,6 +65,107 @@ matrix_to_df2 <- function(array, row.name, col.name, val.name) {
     mutate_all(as.numeric) %>% 
     return
 }
+
+# !!! USE as.data.frame.table() instead
+```
+
+### Batch data loading
+
+```{r}
+load_loop_subj <- function(folder, condition, group.mean = T, diag = F) {
+  array.scores <- array(dim = c(141,141,n.subj))
+  i <- 1
+  for (s in list.subj) {
+    tmp <- os$path$join(path.root, s, folder,
+                        paste0("cv_", condition, "_scores.npy"))
+    
+    # Proceed to next subject if file doesn't exist
+    if (!os$path$isfile(tmp)) {next}
+    
+    # Load data otherwise
+    tmp <- np$load(tmp)
+    
+    # Average across CV folds if present
+    if (length(dim(tmp)) == 3) {
+      tmp <- tmp %>% apply(c(2,3), mean) # average across CV folds
+    }
+      
+    array.scores[,,i] <- tmp
+    i <- i+1
+  }
+  
+  # Return a dataframe
+  # --- average across participants if requested (default)
+  if (group.mean) {
+    array.scores %>% 
+      apply(c(1,2), mean) %>%
+      matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") -> df.out
+  # --- or participant-level data, with a subject identifier column
+  } else {
+    if (diag) {
+      df.out <- tibble()
+      for (i in 1:n.subj) {
+        df.out %<>% bind_rows(
+          array.scores[,,i] %>%
+            matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>%
+            filter(t_train == t_test) %>% mutate(id = list.subj[[i]])
+        )
+      }
+    }
+  }
+  
+  # Crop subject-level data for cluster analysis
+  array.scores <- array.scores[70:nrow(array.scores),,]
+  return(list(array.scores, df.out))
+}
+```
+
+### Cluster permutation stats
+
+```{r}
+get_signif_clust2d <- function(X, n_permutations = 2**12, n_jobs = -1) {
+  # run permutaiton tests
+  mne$stats$spatio_temporal_cluster_1samp_test(X,
+                                               n_permutations = n_permutations,
+                                               n_jobs = as.integer(n_jobs),
+                                               out_type = "mask") -> tmp
+  names(tmp) <- c("t_obs","clusters","cluster_pv","H0")
+  
+  # Extract clusters: the final output is a 0/1 matrix, 1 indicating belonging to a significant cluster 
+  # --- get ids of significant clusters
+  idx.signif <- which(tmp$cluster_pv < .05) 
+  # --- aggregate clusters
+  signif <- array(0, dim = dim(tmp$t_obs)) 
+  for (i in idx.signif) {
+    signif <- signif + tmp$clusters[[i]]
+  }
+  
+  return(1*(signif > 0))
+}
+
+
+# Loop through multiple conditions, stored in a dataframe where each row contains a 2D array in an "array" column
+# Other columns are appended to the output as descriptors of the condition
+cluster_loop_cond <- function(df, H0 = 0.25, n_permutations = 2**12, n_jobs = -1) {
+  # Initialize significant clusters dataframe
+  df.clusters <- tibble()
+  # Loop through all conditions
+  for (i in 1:nrow(df)) {
+    
+    # Extract array of subject-level time-generalized accuracy
+    X <- df[[i,"array"]][[1]] %>% 
+      # --- reshape to how MNE expects it
+      np$moveaxis(as.integer(2), as.integer(0)) 
+  
+    df.clusters %<>% bind_rows(
+      get_signif_clust2d(X-H0, n_jobs = n_jobs, n_permutations = n_permutations) %>% 
+        matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "signif") %>% 
+        bind_cols(select(df,-array)[i,])
+    )
+  }
+  
+  return(df.clusters)
+}
 ```
 
 ### Base plot
@@ -71,12 +173,22 @@ matrix_to_df2 <- function(array, row.name, col.name, val.name) {
 ```{r}
 plot.base <- function(df.plot,
                       col.pal = rev(pals::brewer.rdbu(10)),
-                      col.lines = "grey40",
                       acc.breaks = acc.breaks.base, acc.labels = acc.labels.base) {
+  
+  # Onset lines
+  lines.v.pos <- 330*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333), 1)
+  lines.v.pos <- lines.v.pos[lines.v.pos!=0]
+  lines.h.pos <- 330*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333), 1)
+  lines.h.pos <- lines.h.pos[lines.h.pos!=0]
+
+  # Plot
   df.plot %>% 
     ggplot(aes(x = t_test, y = t_train)) +
-    # facet_grid(direction ~ manip) +
+    # --- heatmap
     geom_tile(aes(fill = accuracy)) +
+    # --- significant clusters
+    geom_contour(aes(z = signif), size = 0.1, color = col.clusters) +
+    # --- sounds onsets
     geom_vline(xintercept = lines.v.pos, linetype = 2, color = col.lines) +
     geom_hline(yintercept = lines.h.pos, linetype = 2, color = col.lines) +
     geom_vline(xintercept = 0, color = col.lines) +
@@ -115,55 +227,6 @@ plot.base <- function(df.plot,
           # no grid
           panel.grid = element_blank()) %>% 
     return
-}
-```
-
-### Load data
-
-```{r}
-load_loop_subj <- function(folder, condition, group.mean = T, diag = F) {
-  array.scores <- array(dim = c(141,141,n.subj))
-  i <- 1
-  for (s in list.subj) {
-    tmp <- os$path$join(path.root, s, folder,
-                        paste0("cv_", condition, "_scores.npy"))
-    
-    # Proceed to next subject if file doesn't exist
-    if (!os$path$isfile(tmp)) {next}
-    
-    # Load data otherwise
-    tmp <- np$load(tmp)
-    
-    # Average across CV folds if present
-    if (length(dim(tmp)) == 3) {
-      tmp <- tmp %>% apply(c(2,3), mean) # average across CV folds
-    }
-      
-    array.scores[,,i] <- tmp
-    i <- i+1
-  }
-  
-  # Return a dataframe
-  # --- average across participants if requested (default)
-  if (group.mean) {
-    array.scores %>% 
-      apply(c(1,2), mean) %>%
-      matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
-      return
-  # --- or participant-level data, with a subject identifier column
-  } else {
-    if (diag) {
-      df.out <- tibble()
-      for (i in 1:n.subj) {
-        df.out %<>% bind_rows(
-          array.scores[,,i] %>%
-            matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>%
-            filter(t_train == t_test) %>% mutate(id = list.subj[[i]])
-        )
-      }
-    }
-    return(df.out)
-  } 
 }
 ```
 
@@ -206,6 +269,8 @@ dt <- 10
 # Colors
 col.pal.base <- rev(pals::brewer.rdbu(10))
 col.pal.diff <- rev(pals::brewer.brbg(10))
+col.lines <- "grey40"
+col.clusters <- "grey20"
 
 # Breaks & Labels
 # --- function
@@ -477,16 +542,17 @@ if (save) {
 ```{r}
 #| cache: true
 
-df.stim <- tibble()
+# Load subject-level data and derive grand average
+df.stim.mean <- tibble()
+df.stim.subj <- tibble()
 for (manip in c("","_reord")) { 
   
   for (direction in c("rd_to_rd", "rd_to_mm", "rd_to_mp", "rd_to_or")) {
+    tmp <- load_loop_subj(folder = "reorder_random",
+                          condition = paste0(direction, manip))
     
-    df.stim %<>% bind_rows(
-      load_loop_subj(folder = "reorder_random",
-                     condition = paste0(direction, manip)) %>% 
-        mutate(manip = manip, direction = direction)
-    )
+    df.stim.subj %<>% bind_rows(tibble(manip = manip, direction = direction, array = list(tmp[[1]])))
+    df.stim.mean %<>% bind_rows(tmp[[2]] %>% mutate(manip = manip, direction = direction))
   }
 }
 ```
@@ -496,27 +562,41 @@ for (manip in c("","_reord")) {
 ```{r}
 #| cache: true
 
-df.omit <- tibble()
+df.omit.mean <- tibble()
+df.omit.subj <- tibble()
 for (manip in c("","_reord")) { 
   
   for (direction in c("rd_to_rd", "rd_to_mm", "rd_to_mp", "rd_to_or")) {
+      
+    tmp <- load_loop_subj(folder = "reorder_random_omission",
+                          condition = paste0(direction, manip))
     
-    df.omit %<>% bind_rows(
-      load_loop_subj(folder = "reorder_random_omission",
-                     condition = paste0(direction, manip)) %>% 
-        mutate(manip = manip, direction = direction)
-    )
+    df.omit.subj %<>% bind_rows(tibble(manip = manip, direction = direction, array = list(tmp[[1]])))
+    df.omit.mean %<>% bind_rows(tmp[[2]] %>% mutate(manip = manip, direction = direction))
   }
 }
 ```
 
-### Prepare data
+### Clusters stats & diff
 
 ```{r}
+#| cache: true
+#| 
+# Cluster analysis
+# --- sounds
+df.clusters <- cluster_loop_cond(df.stim.subj, n_permutations = 2**5)
+df.stim.mean %<>% left_join(df.clusters %>% mutate(t_train = t_train + 69))
+# --- omissions
+df.clusters <- cluster_loop_cond(df.omit.subj, n_permutations = 2**5)
+df.omit.mean %<>% left_join(df.clusters %>% mutate(t_train = t_train + 69))
+# --- differences
+# df.diff.subj
+
+
 
 # Combine SOUNDS & OMISSIONS
-df.plot <- bind_rows(df.stim %>% mutate(stim = "sounds"),
-                     df.omit %>% mutate(stim = "omissions")) %>% 
+df.plot <- bind_rows(df.stim.mean %>% mutate(stim = "sounds"),
+                     df.omit.mean %>% mutate(stim = "omissions")) %>% 
   mutate(direction = toupper(sub("rd_to_", "", direction)),
          direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>%
   # --- convert indices to time
@@ -531,12 +611,7 @@ df.diff <- df.plot %>%
   mutate(accuracy = original - reordered,
          manip = toupper("original - reordered"))
 
-# Onset lines
-lines.color <- "grey40"
-lines.v.pos <- 330*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333), 1)
-lines.v.pos <- lines.v.pos[lines.v.pos!=0]
-lines.h.pos <- 330*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333), 1)
-lines.h.pos <- lines.h.pos[lines.h.pos!=0]
+
 ```
 
 ### Plot
@@ -586,6 +661,8 @@ if (save) {
   g %>% ggsave(filename = "./figures/fig2.png", width = 8, height = 7.5, dpi = 300, device = ragg::agg_png)
 }
 ```
+
+**Figure 2.** Time-generalization decoding of sounds presented in structured sequences with a classifier trained on random sound sequences. **(a, left)** replicates Demarchi et al. approach (figure 3a in the original publication) where above 25% chance level decoding appears possible several hundreds milliseconds before and after the stimulus. The design of our figure is different in two important aspects. First, we set up the color scale so as to reduce the saturation present in the original figure. Yet, in both the original and replicated analyses, the pre-stimulus decoding peaks in the highly regular condition (OR) at -230ms (i.e. approximately 100ms after the onset of the preceding sound) and exceeds the 25% chance level by less than 1 percentage point. Both analyses also reveal late post-stimulus decoding peaking slightly before 500ms after stimulus onset for train times around 100ms. Second, we have extended the testing time to cover the second stimulus before the target, which revealed below 25% chance level accuracy, suggesting that decoding performance was at least partly driven by statistical dependency between stimuli. **(a, right)** is the same analysis, carried out on random generated data re-ordered to mimic structured sequences (see Methods and fig. 1c). Pre-stimulus decoding is found again and **(b)** differentiation with the original results indicate that it is comparable in temporal pattern and magnitude. Residual pre-stimulus decoding is not statistically significant anymore, late post-stimulus decoding remains present. Note the negative diagonal during the decoded stimulus, which reflects the better tuning of the classifier to data coming from the random condition, as well as the positive upper diagonal during $S_{+1}$ which is due to cropping in reordered data. **(c,d)** Original and re-ordering analyses applied to omitted sounds (figure 3b in the original publication) lead to the same conclusions.
 
 ## Figure 3
 
@@ -683,7 +760,7 @@ df.plot <- df.maths.all %>%
   mutate(condition = factor(condition, levels = rev(names(mat.T))),
          stimulus = factor(stimulus, levels = c("S-2", "S-1", "S+1")))
 
-lines.color <- "grey40"
+col.lines <- "grey40"
 lines.v.pos <- 330*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333), 1)
 lines.v.pos <- lines.v.pos[lines.v.pos!=0]
 lines.h.pos <- 330*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333), 1)
@@ -703,7 +780,7 @@ if (save) {
 }
 ```
 
-### 
+**Figure 3.** Based on the transition matrix used to generate sequences of stimuli and the confusion matrix of a classifier trained on random sequence data, it is possible to calculate the expected accuracy of the classifier when tested on structured sequences. The results align closely with the accuracy measured from reordered random data (see figure 2a).
 
 ## Figure 4
 
@@ -756,7 +833,7 @@ df.diff.sp %<>% bind_rows(
   mutate(direction = factor(direction, levels = rev(c("average of\n(MM,MP,OR)","MM","MP","OR"))))
 
 # Onset lines
-lines.color <- "grey40"
+col.lines <- "grey40"
 lines.v.pos <- 333*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333),1)
 lines.v.pos <- lines.v.pos[lines.v.pos!=0]
 lines.h.pos <- 333*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333),1)
@@ -804,6 +881,8 @@ if (save) {
   g %>% ggsave(filename = "./figures/fig4.png", width = 8, height = 4, dpi = 300, device = ragg::agg_png)
 }
 ```
+
+**Figure 4.** Time-generalization decoding of the sound most likely to be presented at t=0, given the identity of the previous sound, with a classifier trained on random sequence data. Compared to the original approach (replicated here in figure 2a, left), this approach tests the more plausible hypothesis that the brain holds the strongest predictive representation for the most statistically likely stimulus, which is not always the actually presented one (see Methods and figure 1d). **(a)** Direct comparison of decoding performance with the 25% chance level appear to suggest negative performance, but this is largely due to statistical dependency between the the most likely and the actual sound, as is confirmed by decoding reordered random sequences. **(b)** After proper control of statistical dependency effects, a robust but weak (\<1% point) above chance level decoding remains between +80 and +230ms.
 
 ## Figure 5
 
@@ -889,11 +968,11 @@ df.plot %>%
               color = NA,
               alpha = 0.3) +
   geom_line() +
-  geom_vline(xintercept = 0, color = lines.color) +
-  geom_vline(xintercept = 333*c(-2,-1,1,2), linetype = 2, color = lines.color)
+  geom_vline(xintercept = 0, color = col.lines) +
+  geom_vline(xintercept = 333*c(-2,-1,1,2), linetype = 2, color = col.lines)
 ```
 
-### 
+**Figure 5.** Decoding of sounds in structured sequences with a classifier trained on the same sequences. During the presentation of the stimulus itself (t between 0 and 333ms), all classifiers have the exact same performance on random sequence data ??? \<- this is not expected: the random classifier should perform better than all others, as it is better tuned to random data (same logic than behind the negative diagonal in figure 2b)
 
 # Supplementary figures
 
