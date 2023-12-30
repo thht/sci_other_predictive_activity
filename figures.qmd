@@ -88,9 +88,9 @@ load_loop_subj <- function(folder, condition, group.mean = T, diag = F) {
   # Return a dataframe
   # --- average across participants if requested (default)
   if (group.mean) {
-    array.scores %>% 
+    df.out <- array.scores %>% 
       apply(c(1,2), mean) %>%
-      matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") -> df.out
+      matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy")
   # --- or participant-level data, with a subject identifier column
   } else {
     if (diag) {
@@ -597,7 +597,7 @@ calculate_diff <- function(df, f.map, values_to) {
 # Cluster analysis
 df.clusters.all <- bind_rows(df.stim.subj, df.omit.subj) %>% 
   calculate_diff(f.map = map2, values_to = "array") %>% 
-  cluster_loop_cond(n_permutations = 2**5)
+  cluster_loop_cond(n_permutations = 10000)
 
 # Aggregate all data and clean
 df.plot <- bind_rows(df.stim.mean, df.omit.mean) %>%
@@ -832,7 +832,7 @@ tmp.ave <- tmp.diff %>%
   mutate(direction = "average of\n(MM,MP,OR)")
 # --- combine & run cluster analysis
 df.clusters.all <- bind_rows(tmp.diff, tmp.ave) %>% 
-  cluster_loop_cond(n_permutations = 2**5)
+  cluster_loop_cond(n_permutations = 10000)
 
 ## Grand average data
 # --- calculate original-reordered difference
@@ -908,10 +908,6 @@ if (save) {
 
 **Figure 4.** Time-generalization decoding of the sound most likely to be presented at t=0, given the identity of the previous sound, with a classifier trained on random sequence data. Compared to the original approach (replicated here in figure 2a, left), this approach tests the more plausible hypothesis that the brain holds the strongest predictive representation for the most statistically likely stimulus, which is not always the actually presented one (see Methods and figure 1d). **(a)** Direct comparison of decoding performance with the 25% chance level appear to suggest negative performance, but this is largely due to statistical dependency between the the most likely and the actual sound, as is confirmed by decoding reordered random sequences. **(b)** After proper control of statistical dependency effects, a robust but weak (\<1% point) above chance level decoding remains between +80 and +230ms.
 
-```{r}
-knitr::knit_exit()
-```
-
 ## Figure 5
 
 ### Load data
@@ -919,30 +915,35 @@ knitr::knit_exit()
 ```{r}
 #| cache: true
 
-df.trainintest <- tibble()
-for (manip in c("","_reord")) { 
-  
-  for (entropy in tolower(names(mat.T))) {
-    
-    df.trainintest %<>% bind_rows(
-      load_loop_subj(folder = "reorder_random",
-                     condition = paste0(entropy,"_to_",entropy,manip)) %>% 
-        mutate(manip = manip, entropy = entropy)
-    )
-  }
-}
+# df.trainintest <- tibble()
+# for (manip in c("","_reord")) { 
+#   
+#   for (entropy in tolower(names(mat.T))) {
+#     
+#     df.trainintest %<>% bind_rows(
+#       load_loop_subj(folder = "reorder_random",
+#                      condition = paste0(entropy,"_to_",entropy,manip)) %>% 
+#         mutate(manip = manip, entropy = entropy)
+#     )
+#   }
+# }
 
-df.trainintest.2 <- tibble()
+df.traineqtest.mean <- tibble()
+df.traineqtest.subj <- tibble()
 for (manip in c("","_reord")) { 
   
   for (entropy in tolower(names(mat.T))) {
     
-    df.trainintest.2 %<>% bind_rows(
-      load_loop_subj(folder = "reorder_random",
-                     condition = paste0(entropy,manip,"_to_",entropy,manip),
-                     group.mean = FALSE, diag = TRUE) %>% 
-        mutate(manip = manip, entropy = entropy)
-    )
+      tmp <- load_loop_subj(folder = "reorder_random",
+                     condition = paste0(entropy, manip, "_to_", entropy, manip),
+                     group.mean = FALSE, diag = TRUE)
+      
+      df.traineqtest.mean %<>% bind_rows(
+        tmp[[2]] %>% mutate(manip = manip, entropy = entropy)
+        )
+      df.traineqtest.subj %<>% bind_rows(
+        tibble(manip = manip, entropy = entropy, array = list(tmp[[1]]))
+        )
   }
 }
 ```
@@ -952,7 +953,7 @@ for (manip in c("","_reord")) {
 ```{r}
 
 # Factorize & filter
-df.plot <- df.trainintest.2 %>% 
+df.plot <- df.traineqtest.mean %>% 
   mutate(entropy = factor(toupper(entropy), levels = rev(names(mat.T)))) %>% 
   # --- convert indices to time
   mutate(across(starts_with("t_"), ~(dt*(.-1)-700)))
@@ -997,7 +998,12 @@ df.plot %>%
               alpha = 0.3) +
   geom_line() +
   geom_vline(xintercept = 0, color = col.lines) +
-  geom_vline(xintercept = 333*c(-2,-1,1,2), linetype = 2, color = col.lines)
+  geom_vline(xintercept = 333*c(-2,-1,1,2), linetype = 2, color = col.lines) +
+  scale_x_continuous(name = " peri-stimulus time (ms)",
+                     breaks = scales::pretty_breaks(8)) +
+  labs(title = "Train & test on same condition data",
+       subtitle = "Only test data is reordered",
+       y = "accuracy")
 ```
 
 **Figure 5.** Decoding of sounds in structured sequences with a classifier trained on the same sequences. During the presentation of the stimulus itself (t between 0 and 333ms), all classifiers have the exact same performance on random sequence data ??? \<- this is not expected: the random classifier should perform better than all others, as it is better tuned to random data (same logic than behind the negative diagonal in figure 2b)
