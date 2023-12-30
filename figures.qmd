@@ -160,6 +160,19 @@ cluster_loop_cond <- function(df, H0 = 0, n_permutations = 2**12, n_jobs = -1) {
 }
 ```
 
+### Difference original-reordered
+
+```{r}
+
+calculate_diff <- function(df, f.map, values_to) {
+  df %>% 
+    mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
+    pivot_wider(names_from = manip, values_from = values_to) %>% 
+    mutate(diff = f.map(original, reordered, .f=\(x,y){x-y})) %>% 
+    pivot_longer(cols = c(original, reordered, diff), names_to = "manip", values_to = values_to)
+}
+```
+
 ### Base plot
 
 ```{r}
@@ -586,21 +599,13 @@ df.omit.subj %<>% mutate(stim = "omissions") %>% mutate(array = map(array, .f=\(
 ```{r}
 #| cache: true
 
-calculate_diff <- function(df, f.map, values_to) {
-  df %>% 
-    mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
-    pivot_wider(names_from = manip, values_from = values_to) %>% 
-    mutate(diff = f.map(original, reordered, .f=\(x,y){x-y})) %>% 
-    pivot_longer(cols = c(original, reordered, diff), names_to = "manip", values_to = values_to)
-}
-
 # Cluster analysis
 df.clusters.all <- bind_rows(df.stim.subj, df.omit.subj) %>% 
   calculate_diff(f.map = map2, values_to = "array") %>% 
-  cluster_loop_cond(n_permutations = 10000)
+  cluster_loop_cond(n_permutations = 5000)
 
 # Aggregate all data and clean
-df.plot <- bind_rows(df.stim.mean, df.omit.mean) %>%
+df.plot.0 <- bind_rows(df.stim.mean, df.omit.mean) %>%
   calculate_diff(f.map = map2_dbl, values_to = "accuracy") %>% 
   # --- append cluster significance
   left_join(df.clusters.all) %>%
@@ -629,7 +634,7 @@ g.diff <- list(sound = c(), omission = c())
 
 for (s in c("sounds","omissions")) {
   # ORIGINAL & REORDERED
-  df.plot %>% 
+  df.plot.0 %>% 
     filter(stim == s, manip != "ORIGINAL - REORDERED") %>% 
     mutate(manip = paste0("Test data: ", manip)) %>% 
     plot.base(col.pal = col.pal.base,
@@ -639,7 +644,7 @@ for (s in c("sounds","omissions")) {
     labs(title = paste0(toupper(s), ", decoding presented")) -> g.base[[s]]
   
   # DIFFERENCE
-  df.plot %>%
+  df.plot.0 %>%
     filter(stim == s, manip == "ORIGINAL - REORDERED") %>% 
     plot.base(col.pal = col.pal.diff,
               acc.breaks = acc.breaks.diff,
@@ -673,7 +678,8 @@ if (save) {
 
 null_accuracy <- function(mat.confusion, mat.transition) {
   # Calculate accuracy under the null hypothesis from the transition and confusion matrices mat.T and mat.C
-  return(0.25 + sum(diag(cov(t(mat.transition), t(mat.confusion)))))
+  # The 3/4 factor is used to compensate the unbiased estimator used in cov() by default (see ?cov)
+  return(0.25 + sum(diag(3/4*cov(t(mat.transition), t(mat.confusion)))))
 }
 
 array.scores <- array(dim = c(34,136,n.subj))
@@ -714,7 +720,7 @@ for (s in list.subj) {
 
 ```
 
-### Calculate
+### Calculate theoretical accuracy
 
 ```{r}
 
@@ -722,27 +728,33 @@ for (s in list.subj) {
 mat.C.mean <- tmp.all %>% apply(c(1,2,3,4), mean)
 
 df.maths.all <- tibble()
-for (condition in names(mat.T)) {
+for (entropy in c("MM","MP","OR")) {
   df.maths.all %<>%
     # Theoretical results for stimulus "S minus 2"
     bind_rows(mat.C.mean %>%
-                apply(c(1,2), null_accuracy, mat.transition = mat.T[[condition]]%^%2) %>%
+                apply(c(1,2), null_accuracy, mat.transition = mat.T[[entropy]]%^%2) %>%
                 matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
-                mutate(condition = condition, stimulus = "S-2")
+                mutate(entropy = entropy, stimulus = "S-2")
               ) %>% 
     # Theoretical results for stimulus "S minus 1"
     bind_rows(mat.C.mean %>%
-                apply(c(1,2), null_accuracy, mat.transition = mat.T[[condition]]%^%1) %>%
+                apply(c(1,2), null_accuracy, mat.transition = mat.T[[entropy]]%^%1) %>%
                 matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
-                mutate(condition = condition, stimulus = "S-1")
+                mutate(entropy = entropy, stimulus = "S-1")
               ) %>% 
     # Theoretical results for stimulus "S+1"
     bind_rows(mat.C.mean %>%
-                apply(c(1,2), null_accuracy, mat.transition = t(mat.T[[condition]])) %>%
+                apply(c(1,2), null_accuracy, mat.transition = t(mat.T[[entropy]])) %>%
                 matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
-                mutate(condition = condition, stimulus = "S+1")
+                mutate(entropy = entropy, stimulus = "S+1")
               )
 }
+```
+
+### Calculate diff with reordered
+
+```{r}
+
 ```
 
 ### Plot
@@ -754,22 +766,67 @@ for (condition in names(mat.T)) {
 #| lightbox:
 #|   group: r-graph
 
-df.plot <- df.maths.all %>% 
+## Clean & prepare
+df.plot.maths <- df.maths.all %>% 
   mutate(across(starts_with("t_"), ~dt*(.-1))) %>% 
-  mutate(t_test = t_test + 330*as.numeric(str_remove(stimulus,"S"))) %>%
-  mutate(condition = factor(condition, levels = rev(names(mat.T))),
+  filter(t_test!=0) %>% mutate(t_test = t_test + 330*as.numeric(str_remove(stimulus,"S"))) %>%
+  mutate(entropy = factor(entropy, levels = rev(names(mat.T))),
          stimulus = factor(stimulus, levels = c("S-2", "S-1", "S+1")))
+  
+## Append re-ordered data
+df.plot.maths %<>% 
+  mutate(manip = "THEORETICAL") %>% 
+  bind_rows(df.plot.0 %>%
+              rename(entropy = direction) %>%
+              filter(manip == "REORDERED", stim == "sounds", entropy != "RD", t_train < 333,
+                     (t_test > -666 & t_test<0) | (t_test > 333 & t_test < 666))
+  ) %>% 
+  select(starts_with("t_"), entropy, manip, accuracy)
 
-df.plot %>% 
-  plot.base(contour = FALSE) +
-  facet_grid(condition ~ .) +
-  labs(title = "Theoretical decoding accuracy",
-       subtitle = "based on transition and confusion matrices") -> g
+## Calculate difference
+df.plot.maths %<>%
+    # mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>%
+    pivot_wider(names_from = manip, values_from = "accuracy") %>%
+    mutate(diff = THEORETICAL - REORDERED) %>%
+    pivot_longer(cols = c(THEORETICAL, REORDERED, diff), names_to = "manip", values_to = "accuracy")
+
+
+## Cluster analysis of difference
+
+## Plot
+# THEORETICAL & REORDERED
+df.plot.maths %>% 
+  filter(manip != "diff") %>% 
+  mutate(manip = factor(manip, levels = c("THEORETICAL","REORDERED"))) %>% 
+  # mutate(manip = map_chr(manip, \(x){ifelse(x=="diff", "THEORETICAL - REORDERED", x)})) %>% 
+  plot.base(col.pal = col.pal.base,
+            acc.breaks = acc.breaks.base,
+            acc.labels = acc.labels.base,
+            contour = F) +
+  facet_grid(entropy ~ manip) -> g.base
+
+# DIFFERENCE
+df.plot.maths %>%
+  filter(manip == "diff") %>% 
+  mutate(manip = "THEORETICAL - REORDERED") %>% 
+  plot.base(col.pal = col.pal.diff,
+            acc.breaks = acc.breaks.diff,
+            acc.labels = acc.labels.diff,
+            contour = F) +
+  facet_grid(entropy ~ manip) +
+  theme(axis.title.y = element_blank(),
+        strip.text = element_text(vjust = 0)) -> g.diff
+
+# ASSEMBLE
+(g.base + g.diff + plot_layout(widths = c(2, 1))) +
+  plot_annotation(tag_levels = c("a","b")) &
+  theme(plot.tag.position = c(0, 1),
+        plot.tag = element_text(size = 14, hjust = 0, vjust = 1, face = "bold")) -> g
 
 g
 
 if (save) {
-  g %>% ggsave(filename = "./figures/fig3.png", width = 8, height = 4, dpi = 300, device = ragg::agg_png)
+  g %>% ggsave(filename = "./figures/fig3.png", width = 8, height = 3, dpi = 300, device = ragg::agg_png)
 }
 ```
 
@@ -781,19 +838,6 @@ if (save) {
 
 ```{r}
 #| cache: true
-
-# df.stim.sp <- tibble()
-# for (manip in c("","_reord")) { 
-#   
-#   for (direction in c("rd_to_mm", "rd_to_mp", "rd_to_or")) {
-#     
-#     df.sp %<>% bind_rows(
-#       load_loop_subj(folder = "reorder_random",
-#                      condition = paste0(direction, "_sp", manip)) %>% 
-#         mutate(manip = manip, direction = direction)
-#     )
-#   }
-# }
 
 # Load subject-level data and derive grand average
 df.stim.sp.mean <- tibble()
@@ -832,7 +876,7 @@ tmp.ave <- tmp.diff %>%
   mutate(direction = "average of\n(MM,MP,OR)")
 # --- combine & run cluster analysis
 df.clusters.all <- bind_rows(tmp.diff, tmp.ave) %>% 
-  cluster_loop_cond(n_permutations = 10000)
+  cluster_loop_cond(n_permutations = 5000)
 
 ## Grand average data
 # --- calculate original-reordered difference
@@ -845,10 +889,10 @@ tmp.ave <- tmp.diff %>%
   summarise(accuracy = mean(accuracy, na.rm=T)) %>% 
   mutate(direction = "average of\n(MM,MP,OR)")
 # --- combine
-df.plot <- bind_rows(tmp.diff, tmp.ave)
+df.plot.sp <- bind_rows(tmp.diff, tmp.ave)
 
 ##  Aggregate all data and clean
-df.plot %<>%
+df.plot.sp %<>%
   # --- append cluster significance
   left_join(df.clusters.all) %>%
   mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
@@ -871,7 +915,7 @@ df.plot %<>%
 #|   group: r-graph
 
 # ORIGINAL & REORDERED
-df.plot %>% 
+df.plot.sp %>% 
   filter(manip != "ORIGINAL - REORDERED") %>% 
   mutate(manip = paste0("Test data: ", manip)) %>% 
   # mutate(manip = case_match(manip, ""~"Test data: ORIGINAL",
@@ -883,7 +927,7 @@ df.plot %>%
   labs(title = paste0(toupper("sounds"), ", decoding most likely")) -> g.base
 
 # DIFFERENCE & AVERAGE
-df.plot %>%
+df.plot.sp %>%
   filter(manip == "ORIGINAL - REORDERED") %>% 
   plot.base(col.pal = col.pal.diff,
             acc.breaks = acc.breaks.diff,
@@ -953,14 +997,14 @@ for (manip in c("","_reord")) {
 ```{r}
 
 # Factorize & filter
-df.plot <- df.traineqtest.mean %>% 
+df.plot.teqt <- df.traineqtest.mean %>% 
   mutate(entropy = factor(toupper(entropy), levels = rev(names(mat.T)))) %>% 
   # --- convert indices to time
   mutate(across(starts_with("t_"), ~(dt*(.-1)-700)))
   
 
 # Add difference scores
-df.plot %<>% 
+df.plot.teqt %<>% 
   mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
   pivot_wider(names_from = manip, values_from = accuracy) %>%
   mutate(diff = original - reordered) %>% 
@@ -970,7 +1014,7 @@ df.plot %<>%
                                 diff = "original - reordered",)))
 
 # Calculate group mean & CIs
-df.plot %<>%
+df.plot.teqt %<>%
   group_by(t_train, entropy, manip) %>% 
   summarise(accuracy.ci = sd(accuracy),
             accuracy.mean = mean(accuracy),
@@ -986,7 +1030,7 @@ This one trains on entropy data and tests on random-reordered:
 #| lightbox:
 #|   group: r-graph
 
-df.plot %>% 
+df.plot.teqt %>% 
   ggplot(aes(x = t_train, y = accuracy.mean, color = entropy, fill = entropy)) +
   facet_grid(manip ~ ., scales = "free_y") +
   geom_hline(data = tibble(manip = factor(c("original", "reordered", "original - reordered"),
