@@ -46,15 +46,6 @@ save <- FALSE
 ### Matrix to df
 
 ```{r}
-# matrix_to_df <- function(array, row.name = "t_train", col.name = "t_test", val.name = "value") {
-#   array %>% 
-#     as_tibble() %>%
-#     rownames_to_column("t_train") %>%
-#     pivot_longer(-t_train, names_to = "t_test", values_to = "value") %>% 
-#     mutate(t_test = str_remove(t_test, "V")) %>% 
-#     mutate(across(starts_with("t_"), ~(10*(as.numeric(.)-1)-700))) %>% 
-#     return
-# }
 
 matrix_to_df2 <- function(array, row.name, col.name, val.name) {
   array %>% 
