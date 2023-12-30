@@ -172,6 +172,7 @@ cluster_loop_cond <- function(df, H0 = 0, n_permutations = 2**12, n_jobs = -1) {
 
 ```{r}
 plot.base <- function(df.plot,
+                      contour = TRUE,
                       col.pal = rev(pals::brewer.rdbu(10)),
                       acc.breaks = acc.breaks.base, acc.labels = acc.labels.base) {
   
@@ -182,12 +183,10 @@ plot.base <- function(df.plot,
   lines.h.pos <- lines.h.pos[lines.h.pos!=0]
 
   # Plot
-  df.plot %>% 
+  g <- df.plot %>% 
     ggplot(aes(x = t_test, y = t_train)) +
     # --- heatmap
     geom_tile(aes(fill = accuracy)) +
-    # --- significant clusters
-    geom_contour(aes(z = signif), size = 0.1, color = col.clusters) +
     # --- sounds onsets
     geom_vline(xintercept = lines.v.pos, linetype = 2, color = col.lines) +
     geom_hline(yintercept = lines.h.pos, linetype = 2, color = col.lines) +
@@ -225,8 +224,15 @@ plot.base <- function(df.plot,
           legend.box.margin = margin(0,0,0,0),
           legend.box.spacing = unit(0, "pt"),
           # no grid
-          panel.grid = element_blank()) %>% 
-    return
+          panel.grid = element_blank())
+  
+  # --- significant clusters
+  if (contour) {
+    g <- g +
+      geom_contour(aes(z = signif), size = 0.1, color = col.clusters)
+  }
+  
+  return(g)
 }
 ```
 
@@ -551,8 +557,8 @@ for (manip in c("","_reord")) {
     tmp <- load_loop_subj(folder = "reorder_random",
                           condition = paste0(direction, manip))
     
-    df.stim.subj %<>% bind_rows(tibble(manip = manip, direction = direction, array = list(tmp[[1]])))
     df.stim.mean %<>% bind_rows(tmp[[2]] %>% mutate(manip = manip, direction = direction))
+    df.stim.subj %<>% bind_rows(tibble(manip = manip, direction = direction, array = list(tmp[[1]])))
   }
 }
 
@@ -574,8 +580,8 @@ for (manip in c("","_reord")) {
     tmp <- load_loop_subj(folder = "reorder_random_omission",
                           condition = paste0(direction, manip))
     
-    df.omit.subj %<>% bind_rows(tibble(manip = manip, direction = direction, array = list(tmp[[1]])))
     df.omit.mean %<>% bind_rows(tmp[[2]] %>% mutate(manip = manip, direction = direction))
+    df.omit.subj %<>% bind_rows(tibble(manip = manip, direction = direction, array = list(tmp[[1]])))
   }
 }
 
@@ -808,15 +814,8 @@ df.plot <- df.maths.all %>%
   mutate(condition = factor(condition, levels = rev(names(mat.T))),
          stimulus = factor(stimulus, levels = c("S-2", "S-1", "S+1")))
 
-col.lines <- "grey40"
-lines.v.pos <- 330*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333), 1)
-lines.v.pos <- lines.v.pos[lines.v.pos!=0]
-lines.h.pos <- 330*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333), 1)
-lines.h.pos <- lines.h.pos[lines.h.pos!=0]
-
-
 df.plot %>% 
-  plot.base() +
+  plot.base(contour = FALSE) +
   facet_grid(condition ~ .) +
   labs(title = "Theoretical decoding accuracy",
        subtitle = "based on transition and confusion matrices") -> g
@@ -837,55 +836,83 @@ if (save) {
 ```{r}
 #| cache: true
 
-df.sp <- tibble()
+# df.stim.sp <- tibble()
+# for (manip in c("","_reord")) { 
+#   
+#   for (direction in c("rd_to_mm", "rd_to_mp", "rd_to_or")) {
+#     
+#     df.sp %<>% bind_rows(
+#       load_loop_subj(folder = "reorder_random",
+#                      condition = paste0(direction, "_sp", manip)) %>% 
+#         mutate(manip = manip, direction = direction)
+#     )
+#   }
+# }
+
+# Load subject-level data and derive grand average
+df.stim.sp.mean <- tibble()
+df.stim.sp.subj <- tibble()
 for (manip in c("","_reord")) { 
   
   for (direction in c("rd_to_mm", "rd_to_mp", "rd_to_or")) {
     
-    df.sp %<>% bind_rows(
-      load_loop_subj(folder = "reorder_random",
-                     condition = paste0(direction, "_sp", manip)) %>% 
-        mutate(manip = manip, direction = direction)
-    )
+    tmp <- load_loop_subj(folder = "reorder_random",
+                          condition = paste0(direction, "_sp", manip))
+    
+    df.stim.sp.mean %<>% bind_rows(tmp[[2]] %>% mutate(manip = manip, direction = direction))
+    df.stim.sp.subj %<>% bind_rows(tibble(manip = manip, direction = direction, array = list(tmp[[1]])))
   }
 }
+
+df.stim.sp.mean %<>% mutate(stim = "sounds")
+df.stim.sp.subj %<>% mutate(stim = "sounds") %>% mutate(array = map(array, .f=\(x){x-0.25}))
 ```
 
-### Prepare data
+### Cluster stats & average
 
 ```{r}
-# Combine SOUNDS & OMISSIONS
-df.plot.sp <- df.sp %>% 
-  mutate(direction = toupper(sub("rd_to_", "", direction)),
-         direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>% 
+#| cache: true
+
+## Cluster analysis with subject-level data
+# --- calculate original-reordered difference
+tmp.diff <- df.stim.sp.subj %>% 
+  calculate_diff(f.map = map2, values_to = "array")
+# --- calculate average of differences
+tmp.ave <- tmp.diff %>% 
+  filter(manip == "diff") %>% 
+  pivot_wider(names_from = direction, values_from = array) %>% 
+  group_by(stim, manip) %>% 
+  summarise(array = pmap(., .f=function(rd_to_mm, rd_to_mp, rd_to_or, ...) {(rd_to_mm+rd_to_mp+rd_to_or)/3})) %>% 
+  mutate(direction = "average of\n(MM,MP,OR)")
+# --- combine & run cluster analysis
+df.clusters.all <- bind_rows(tmp.diff, tmp.ave) %>% 
+  cluster_loop_cond(n_permutations = 2**5)
+
+## Grand average data
+# --- calculate original-reordered difference
+tmp.diff <- df.stim.sp.mean %>%
+  calculate_diff(f.map = map2_dbl, values_to = "accuracy")
+# --- calculate average of difference across entropy levels
+tmp.ave <- tmp.diff %>% 
+  filter(manip == "diff") %>% 
+  group_by(t_train, t_test, manip, stim) %>% 
+  summarise(accuracy = mean(accuracy, na.rm=T)) %>% 
+  mutate(direction = "average of\n(MM,MP,OR)")
+# --- combine
+df.plot <- bind_rows(tmp.diff, tmp.ave)
+
+##  Aggregate all data and clean
+df.plot %<>%
+  # --- append cluster significance
+  left_join(df.clusters.all) %>%
+  mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
+                                diff = "ORIGINAL - REORDERED"))) %>%
+  mutate(direction = toupper(sub("rd_to_", "", direction))) %>% 
+  mutate(direction = factor(direction, levels = rev(c("AVERAGE OF\n(MM,MP,OR)","MM","MP","OR")))) %>%
   # --- convert indices to time
-  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>% 
+  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
   # --- crop time
   filter(t_train>=0, (t_train-333) < dt)
-
-# Calculate difference scores
-df.diff.sp <- df.plot.sp %>% 
-  mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
-  pivot_wider(names_from = manip, values_from = accuracy) %>%
-  mutate(accuracy = original - reordered,
-         manip = toupper("original - reordered"))
-
-# --- add average across entropy levels
-df.diff.sp %<>% bind_rows(
-  df.diff.sp %>% 
-    group_by(t_train, t_test) %>% 
-    summarise(accuracy = mean(accuracy, na.rm=T), .groups = "drop") %>% 
-    mutate(direction = "average of\n(MM,MP,OR)",
-           manip = toupper("original - reordered"))
-  ) %>% 
-  mutate(direction = factor(direction, levels = rev(c("average of\n(MM,MP,OR)","MM","MP","OR"))))
-
-# Onset lines
-col.lines <- "grey40"
-lines.v.pos <- 333*seq(round(min(df.plot$t_test)/333), round(max(df.plot$t_test)/333),1)
-lines.v.pos <- lines.v.pos[lines.v.pos!=0]
-lines.h.pos <- 333*seq(round(min(df.plot$t_train)/333), round(max(df.plot$t_train)/333),1)
-lines.h.pos <- lines.h.pos[lines.h.pos!=0]
 ```
 
 ### Plot
@@ -898,17 +925,20 @@ lines.h.pos <- lines.h.pos[lines.h.pos!=0]
 #|   group: r-graph
 
 # ORIGINAL & REORDERED
-df.plot.sp %>% 
-  mutate(manip = case_match(manip, ""~"Test data: ORIGINAL",
-                            "_reord"~"Test data: RANDOM REORDERED")) %>% 
+df.plot %>% 
+  filter(manip != "ORIGINAL - REORDERED") %>% 
+  mutate(manip = paste0("Test data: ", manip)) %>% 
+  # mutate(manip = case_match(manip, ""~"Test data: ORIGINAL",
+  #                           "_reord"~"Test data: RANDOM REORDERED")) %>% 
   plot.base(col.pal = col.pal.base,
             acc.breaks = acc.breaks.base,
             acc.labels = acc.labels.base) +
   facet_grid(direction ~ manip) +
   labs(title = paste0(toupper("sounds"), ", decoding most likely")) -> g.base
 
-# DIFFERENCE
-df.diff.sp %>%
+# DIFFERENCE & AVERAGE
+df.plot %>%
+  filter(manip == "ORIGINAL - REORDERED") %>% 
   plot.base(col.pal = col.pal.diff,
             acc.breaks = acc.breaks.diff,
             acc.labels = acc.labels.diff) +
@@ -931,6 +961,10 @@ if (save) {
 ```
 
 **Figure 4.** Time-generalization decoding of the sound most likely to be presented at t=0, given the identity of the previous sound, with a classifier trained on random sequence data. Compared to the original approach (replicated here in figure 2a, left), this approach tests the more plausible hypothesis that the brain holds the strongest predictive representation for the most statistically likely stimulus, which is not always the actually presented one (see Methods and figure 1d). **(a)** Direct comparison of decoding performance with the 25% chance level appear to suggest negative performance, but this is largely due to statistical dependency between the the most likely and the actual sound, as is confirmed by decoding reordered random sequences. **(b)** After proper control of statistical dependency effects, a robust but weak (\<1% point) above chance level decoding remains between +80 and +230ms.
+
+```{r}
+knitr::knit_exit()
+```
 
 ## Figure 5
 
