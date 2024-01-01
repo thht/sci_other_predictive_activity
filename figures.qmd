@@ -669,6 +669,93 @@ if (save) {
 
 **Figure 2.** Time-generalization decoding of sounds presented in structured sequences with a classifier trained on random sound sequences. **(a, left)** replicates Demarchi et al. approach (figure 3a in the original publication) where above 25% chance level decoding appears possible several hundreds milliseconds before and after the stimulus. The design of our figure is different in two important aspects. First, we set up the color scale so as to reduce the saturation present in the original figure. Yet, in both the original and replicated analyses, the pre-stimulus decoding peaks in the highly regular condition (OR) at -230ms (i.e. approximately 100ms after the onset of the preceding sound) and exceeds the 25% chance level by less than 1 percentage point. Both analyses also reveal late post-stimulus decoding peaking slightly before 500ms after stimulus onset for train times around 100ms. Second, we have extended the testing time to cover the second stimulus before the target, which revealed below 25% chance level accuracy, suggesting that decoding performance was at least partly driven by statistical dependency between stimuli. **(a, right)** is the same analysis, carried out on random generated data re-ordered to mimic structured sequences (see Methods and fig. 1c). Pre-stimulus decoding is found again and **(b)** differentiation with the original results indicate that it is comparable in temporal pattern and magnitude. Residual pre-stimulus decoding is not statistically significant anymore, late post-stimulus decoding remains present. Note the negative diagonal during the decoded stimulus, which reflects the better tuning of the classifier to data coming from the random condition, as well as the positive upper diagonal during $S_{+1}$ which is due to cropping in reordered data. **(c,d)** Original and re-ordering analyses applied to omitted sounds (figure 3b in the original publication) lead to the same conclusions.
 
+```{r}
+
+df.tmp <- df.stim.subj %>% 
+  calculate_diff(f.map = map2, values_to = "array") %>% 
+  filter(manip == "diff")
+df.plot.0.diag <- tibble()
+for (k in 1:nrow(df.tmp)) {
+  d <- df.tmp$direction[k]
+  for (i in 1:n.subj) {
+    df.plot.0.diag %<>% bind_rows(
+      df.tmp[[k,"array"]][[1]][,,i] %>% 
+        matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
+        filter(t_train == t_test) %>% 
+        mutate(direction = d, id = list.subj[[i]])
+    )
+  }
+}
+
+
+df.plot <- df.plot.0.diag %>% 
+  filter(t_train >= 70, t_train <= 103) %>% 
+  mutate(t_train = dt*(t_train-70))
+  
+df.plot %>% 
+  ggplot(aes(x = t_train, y = accuracy, color = direction)) +
+  facet_wrap(~ id, ncol = 6) +
+  geom_line() 
+
+```
+
+```{r}
+df.model <- df.plot %>%
+  mutate(across(c(id,direction), as.factor)) %>% 
+  mutate(start.event = (t_train == 0)) %>% 
+  mutate(direction = ordered(relevel(direction, ref="rd_to_rd")))
+
+contrasts(df.model$direction) <- "contr.treatment"
+
+library(mgcv)
+library(gratia)
+library(itsadug)
+m.fx_1 <- gam(accuracy ~ s(t_train),
+              data = df.model)
+summary(m.fx_1)
+plot(m.fx_1)
+
+m.fx_dir <- gam(accuracy ~ direction + s(t_train, by=direction),
+                data = df.model)
+summary(m.fx_dir)
+gratia::draw(m.fx_dir, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
+
+m.fx_1.rd_1 <- gam(accuracy ~ s(t_train) + s(id, bs="re"),
+                   data = df.model)
+summary(m.fx_1.rd_1)
+gratia::draw(m.fx_1.rd_1, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
+
+m.fx_dir.rd_1 <- gam(accuracy ~ direction + s(t_train, by=direction) + s(id, bs="re"),
+                     data = df.model)
+summary(m.fx_dir.rd_1)
+gratia::draw(m.fx_dir.rd_1, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
+
+m.fx_1.rd_t <- gam(accuracy ~ s(t_train) + s(t_train, id, bs="fs", m=1),
+          data = df.model)
+summary(m.fx_1.rd_t)
+gratia::draw(m.fx_1.rd_t, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
+
+m.fx_dir.rd_t <- gam(accuracy ~ direction + s(t_train, by=direction) + s(t_train, id, bs="fs", m=1),
+          data = df.model) #, method = "ML"
+summary(m.fx_dir.rd_t)
+gratia::draw(m.fx_dir.rd_t, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
+plot(m.fx_dir.rd_t)
+
+m.fx_dir.rd_t.ar.6 <- gam(accuracy ~ direction + s(t_train, by=direction) + s(t_train, id, bs="fs", m=1),
+          data = df.model, AR.start = df.model$start.event, rho=0.6)#, method = "ML"
+summary(m.fx_dir.rd_t.ar.6)
+gratia::draw(m.fx_dir.rd_t.ar.6, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
+
+acf_plot(resid(m.fx_1))
+acf_plot(resid(m.fx_dir))
+acf_plot(resid(m.fx_1.rd_1))
+acf_plot(resid(m.fx_dir.rd_1))
+acf_plot(resid(m.fx_1.rd_t))
+acf_plot(resid(m.fx_dir.rd_t))
+acf_plot(resid(m.fx_dir.rd_t.ar.6))
+
+```
+
 ## Figure 3
 
 ### Load confusion matrices
@@ -755,17 +842,6 @@ for (entropy in c("MM","MP","OR")) {
 
 ```{r}
 
-```
-
-### Plot
-
-```{r}
-#| fig-width: 8
-#| fig-height: 4
-#| column: page
-#| lightbox:
-#|   group: r-graph
-
 ## Clean & prepare
 df.plot.maths <- df.maths.all %>% 
   mutate(across(starts_with("t_"), ~dt*(.-1))) %>% 
@@ -790,8 +866,18 @@ df.plot.maths %<>%
     mutate(diff = THEORETICAL - REORDERED) %>%
     pivot_longer(cols = c(THEORETICAL, REORDERED, diff), names_to = "manip", values_to = "accuracy")
 
-
 ## Cluster analysis of difference
+
+```
+
+### Plot
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4
+#| column: page
+#| lightbox:
+#|   group: r-graph
 
 ## Plot
 # THEORETICAL & REORDERED
@@ -1016,7 +1102,7 @@ df.plot.teqt %<>%
 # Calculate group mean & CIs
 df.plot.teqt %<>%
   group_by(t_train, entropy, manip) %>% 
-  summarise(accuracy.ci = sd(accuracy),
+  summarise(accuracy.ci = 2*sd(accuracy)/sqrt(n.subj),
             accuracy.mean = mean(accuracy),
             .groups = "drop")
 ```
