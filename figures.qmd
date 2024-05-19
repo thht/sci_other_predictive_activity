@@ -391,8 +391,8 @@ df.plot %>%
              aes(x, y, color = pitch), size = 4, show.legend = FALSE) +
   
   scale_color_viridis_c() +
-  scale_x_continuous(name = "...to...\n", position = "top") +
-  scale_y_reverse(name = "from...\n") +
+  scale_x_continuous(name = "to\n", position = "top") +
+  scale_y_reverse(name = "from\n") +
   scale_fill_gradient(name = "transition probability",
                       low = "white", high = "black",
                       labels = ~str_replace(., "^0.","."),
@@ -439,19 +439,42 @@ df.plot <- stims %>% as.tibble() %>%
   group_by(entropy,class) %>% mutate(rank = rank(idx)) %>% 
   mutate(y = as.double(entropy) + class/16-10/64)
 
+pitch.y <- sort(unique(df.plot$y))
+
 # Plot
 df.plot %>% 
   ggplot(aes(x = idx, y = y, color = class)) +
+  
+  # --- pitch lines
+  geom_hline(yintercept = pitch.y, color = "grey90") +
+  # --- pitch labels
+  annotate(geom = "text", label = "pitch",
+           x = 1, y = c(mean(head(pitch.y,4)), mean(tail(pitch.y,4))),
+           hjust = 0.5, vjust = -1, size = 4, color = "grey50", angle = 90) +
+  
+  annotate(geom = "text", label = "low",
+           x = 1, y = c(min(head(pitch.y,4)), min(tail(pitch.y,4))),
+           hjust = 0.5, vjust = -2.5, size = 3, color = "grey50", angle = 90) +
+  
+  annotate(geom = "text", label = "high",
+           x = 1, y = c(max(head(pitch.y,4)), max(tail(pitch.y,4))),
+           hjust = 0.5, vjust = -2.5, size = 3, color = "grey50", angle = 90) +
+  
+  # --- reordering trajectories
   ggh4x::geom_pointpath(data = df.plot %>% arrange(desc(entropy)),
                aes(x = idx, y = y, group = interaction(class,rank)),
                mult = 0.4, color = "black", linewidth = 0.3,
                arrow = arrow(length=unit(.2, 'cm'))) +
+  # --- stimuli
   geom_point(size = 4, show.legend = F) +
+  # --- stimuli ranks
   geom_text(aes(label = rank), size = 2, color = "white") +
+  
   scale_x_continuous(name = "sequence index", breaks = 1:n.samples) +
   scale_y_continuous(breaks = c(1,2), labels = c("OR","RD"), position = "left") +
   scale_color_viridis_c() +
   coord_cartesian(clip = "off") +
+  
   theme(axis.title.y = element_blank(),
         axis.text.y = element_text(size = 12, color = "black"),
         axis.title.x = element_text(size = 9, color = "black"),
