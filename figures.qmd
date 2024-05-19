@@ -488,7 +488,7 @@ g.reordering
 
 Presented vs. most likely
 
-```{r}
+```{r, fig.width=3.5, fig.height=2}
 #| output: false
 
 # Generate Markov sequences
@@ -510,26 +510,34 @@ df.plot <- stims %>% as.tibble() %>%
   mutate(entropy = factor(entropy, levels = names(stims))) %>% 
   group_by(entropy) %>% mutate(actual = lead(class),
                                mostlikely = ifelse(class==1, 4, class-1)) %>% 
-  pivot_longer(c(actual,mostlikely), names_to = "prediction", values_to = "class.pred")
+  pivot_longer(c(actual,mostlikely), names_to = "status", values_to = "class.pred")
 
 # Plot
 df.plot %>% 
   ggplot(aes(x = idx, y = class)) +
   facet_wrap(~ entropy, nrow = 2, strip.position = "right") +
+  geom_point(data = df.plot %>% filter(status == "mostlikely", idx != n.samples),
+             aes(x = idx+1, y = class.pred), size = 2, shape = 21, color = "grey50", fill = "white") +
+  geom_segment(data = df.plot %>% filter(status == "mostlikely", idx != n.samples),
+               aes(x = idx, xend = idx+1, y = class, yend = class.pred),
+               color = "grey50", arrow = arrow(type = "closed", length = unit(4,"pt"))) +
   geom_point(aes(fill = class), size = 2, shape = 21, show.legend = F) +
-  geom_point(data = df.plot %>% filter(prediction == "mostlikely", idx != n.samples),
-             aes(x = idx+1, y = class.pred), size = 2, shape = 8) +
+  # geom_point(data = df.plot %>% filter(status == "mostlikely", idx != n.samples),
+  #            aes(x = idx+1, y = class.pred), size = 2, shape = 8) +
   scale_x_continuous(name = "sequence index", breaks = 1:n.samples) +
   scale_y_continuous(name = "") +
   scale_fill_viridis_c() +
   coord_cartesian(clip = "off") +
   expand_limits(x = c(0.9,6.1), y = c(0.3,4.7)) +
-  theme(panel.border = element_rect(fill=NA),
+  labs(caption = str_wrap("Colored points represent actual stimuli, grey arrows and open circles represent predictions from current stimulus.", width = 70)) +
+  theme(plot.caption = element_text(size = 6),
         axis.text.y = element_blank(),
         axis.title.x = element_text(size = 9, color = "black"),
         strip.text = element_text(size = 12),
         panel.spacing = unit(0.2,"cm"),
-        panel.grid = element_blank()) -> g.mostlikely
+        panel.grid = element_blank(),
+        panel.border = element_rect(fill=NA),
+        ) -> g.mostlikely
 
 g.mostlikely
 ```
