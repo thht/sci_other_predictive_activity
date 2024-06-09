@@ -208,6 +208,11 @@ for g,inds in grp.groups.items():
 
         cond2counts[cond+'_sp_reord'] = Counter(cond2epochs_sp_reord[cond].events[:,2])
 
+
+    fnf = op.join(results_folder, f'cond2counts.npz' )
+    print('Saving ',fnf)
+    np.save(fnf , v )
+
     ###################################################################
     ########################     CV
     ###################################################################
