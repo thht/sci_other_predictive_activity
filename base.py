@@ -48,28 +48,49 @@ Mt2M['mm'] = Mmm
 
 def events_simple_pred(events, Mtype):
     assert events.ndim == 2
+    # this will be the resulting transformed events array
     r = np.zeros_like(events)
+
     assert np.min(events[:,2]) == 1
     assert np.max(events[:,2]) == 4
 
+    # we are not supposed to have any bias in completely random condition, so no 'simple prediction' is possible
     if Mtype == 'rd':
         return events.copy()
     M = Mt2M[Mtype]
 
-    r[:,:2] = events[:,:2]
-    r[0,2] = events[0,2]
+    # this is fair copying of data, not just playing with pointers, so I can safely modify r later within affecting events
+    r[:,:2] = events[:,:2] 
+    r[0,2]  = events[0,2]
     for i in range(1, events.shape[0]):
         prev_stim = events[i-1,2]
+        # set the most probably event index to be the predicted one
         pred_stim = M[:,prev_stim-1].argmax() 
-        r[i,2] = pred_stim + 1
+        # +1 is needed buecuse even types in events_sound are starting from 1
+        # whereas python indexing starts from 0
+        r[i,2] = pred_stim + 1  
     return r
 
 
 def reorder(random_events, events, raw_rd, del_processed = True,
         cut_fl = 0, dur=200, nsamples = 33, tmin=-0.7, tmax=0.7):
     events = list(events)
+    '''
+    random events,
+    target events 
+    raw_rd: raw object for random sequence, sfreq = 100 Hz
+    cut_fl: whether we cut out first and last events from the final result
+    dur : duration (in samples) of pre-task and post-task data 
+    nsamples: trial duration in samples
+    tmin, tmax -- time offsets with respect to event onset, used to construct resulting epochs
+    del_processed: basically determines version of the algorithm. =False is supposed to be better but it does not work well, so is supposed to be never used
 
-    events_reord = list()  # the reordered events (based on yor)
+    returns epochs_reord, orig_nums_reord
+    '''
+
+    assert abs(raw_rd.info['sfreq'] - 100. ) < 1e-10, raw_rd.info['sfreq']
+
+    events_reord = list()  # the reordered events we will construct 
     # prepare raw data
     raw_Xrd = raw_rd.get_data()
     raw_reord = list()  # the reordered X (based on yor), first contains data extracted from raws
@@ -79,8 +100,8 @@ def reorder(random_events, events, raw_rd, del_processed = True,
     first_samp = raw_rd.first_samp
     # keep the original trial numbers in the random (for correct cross-validation and also comparison with the same not-reordered random trials)
     #random_events_processed = []
-    orig_nums = list()
-    new_sample+=dur
+    orig_nums = list() # (roughly) permutation of the original random event indices
+    new_sample += dur # sample where we will put the random event
 
     # Romain's version
     if del_processed:
@@ -95,19 +116,22 @@ def reorder(random_events, events, raw_rd, del_processed = True,
                 # index of first not processed with save code
                 index = random_events[:, 2].tolist().index(event[2])
 
+                # save the index of the original (not reordered) random event 
                 orig_nums.append(random_events_numbers[index])
+                # correctly offsetted sample
                 samp = random_events[index, 0] - first_samp
-                # DQ: why 33?
                 raw_reord.append(raw_Xrd[:, samp:samp+nsamples])
+
                 random_events = np.delete(random_events, index, axis=0)
                 random_events_numbers = np.delete(random_events_numbers, index, axis=0)
 
-                # simple artificial sample indices
+                # putting target event to the new sample
                 events_reord.append([new_sample, 0, event[2]])
-                new_sample+=nsamples
+                new_sample += nsamples
             else:
                 pass
     else:
+        raise ValueError('need further debugging before using')
         random_events_aug = np.concatenate([  random_events, 
             np.arange(len(random_events))[:,None]], axis=1 )
         was_processed = np.zeros(len(random_events), dtype=bool )
@@ -132,13 +156,14 @@ def reorder(random_events, events, raw_rd, del_processed = True,
                 new_sample+=nsamples
 
     raw_reord.append(raw_Xrd[:, -dur:])  # end the reorderd random with the 2 last seconds of the random raw
+
     # will be used to define epochs_rd
     orig_nums_reord = np.array(orig_nums)  
     events_reord = np.array(events_reord)  
     # removing the first and last trials
     if cut_fl:
         orig_nums_reord = orig_nums_reord[1:-1]
-        events_reord = events_reord[1:-1]
+        events_reord    = events_reord[1:-1]
     raw_reord = np.concatenate(raw_reord, axis=1)
     raw_reord = mne.io.RawArray(raw_reord, raw_rd.info)
 
