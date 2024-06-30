@@ -67,7 +67,7 @@ matrix_to_df2 <- function(array, row.name, col.name, val.name) {
 ### Batch data loading
 
 ```{r}
-load_loop_subj <- function(folder, condition, group.mean = T, diag = F) {
+load_loop_subj <- function(folder, condition, do.mean = T, diag = F) {
   array.scores <- array(dim = c(141,141,n.subj))
   i <- 1
   for (s in list.subj) {
@@ -91,7 +91,7 @@ load_loop_subj <- function(folder, condition, group.mean = T, diag = F) {
   
   # Return a dataframe
   # --- average across participants if requested (default)
-  if (group.mean) {
+  if (do.mean) {
     df.out <- array.scores %>% 
       apply(c(1,2), mean) %>%
       matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy")
@@ -120,11 +120,11 @@ load_loop_subj <- function(folder, condition, group.mean = T, diag = F) {
 ```{r}
 
 ## Correlation function between two vectors
-correlations_vecs <- function(slice, vec) {
-  cor(as.vector(slice), vec)
+correlations_vecs <- function(vec1, vec2) {
+  cor(as.vector(vec1), as.vector(vec2))
 }
 
-# Bind time-generalization matrices from different entropic conditions into a single 3D array
+# Bind time-generalization matrices from different entropy conditions into a single 3D array
 correlations_extract3D <- function(data, idx.lines, idx.subj) {
   arr.tmp <- data[[idx.lines[1],"array"]][[1]][,,idx.subj]
   for (i in 2:length(idx.lines)) {
@@ -208,7 +208,7 @@ calculate_diff <- function(df, f.map, values_to) {
 ### Base plot
 
 ```{r}
-plot.base <- function(df.plot,
+plot_base <- function(df.plot,
                       z = "accuracy",
                       contour = TRUE,
                       col.contour = col.clusters,
@@ -360,65 +360,9 @@ theme_update(plot.tag.position = c(0, 1),
              plot.tag = element_text(size = 14, hjust = 0, vjust = 1, face = "bold"))
 ```
 
-# Figures
+# Methodological figures
 
-## METHODS
-
-### Pitches
-
-```{r}
-#| fig-width: 1
-#| fig-height: 2
-#| output: false
-df.plot.pitch <- tibble(pitch = c(200,430,928,2000))
-
-df.plot.pitch %>% 
-  ggplot(aes(x = 1, y = pitch, color = (pitch))) +
-  geom_point(size = 4, show.legend = F) +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_y_continuous(name = "Pitch (Hz)",
-                     breaks = df.plot.pitch$pitch) +
-  scale_color_viridis_c(name = "Pitch (Hz)",
-                        breaks = (df.plot.pitch$pitch),
-                        trans = "log") +
-  coord_cartesian(clip = "off") +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        panel.grid = element_blank(),
-        panel.grid.major.y = element_line()) -> g.pitch
-
-g.pitch
-```
-
-```{r}
-#| eval: false
-#| fig-width: 1
-#| fig-height: 2
-df.plot.pitch <- tibble(pitch = c(200,430,928,2000))
-
-df.plot.pitch %>% 
-  ggplot(aes(x = 1, y = pitch, color = (pitch))) +
-  geom_point(size = 6) +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_color_viridis_c(name = "Pitch (Hz)",
-                        breaks = (df.plot.pitch$pitch),
-                        trans = "log") +
-  guides(color = guide_colorbar(title.hjust = 1,
-                                label.position = "left",
-                                label.vjust = c(0,0.5,0.5,1),
-                                barwidth = 0.5, barheight = 8)) +
-  coord_trans(y = scales::log_trans(),
-              ylim = c(200/2.15, 2000*2.15),
-              clip = "off") +
-  theme_void() +
-  theme(legend.position = "left",
-        legend.box.margin = margin(b = 15, r=-20)) -> g.pitch2
-
-g.pitch2
-
-```
-
-### Transition matrices
+## Transition matrices (fig. 1a)
 
 ```{r}
 #| output: false
@@ -442,7 +386,7 @@ df.plot %>%
   ggplot(aes(x = to, y = from)) +
   facet_wrap(~ condition, nrow = 1, strip.position = "bottom") +
   # --- heatmap
-  geom_tile(aes(fill = p)) +
+  geom_tile(aes(fill = p), color = "black") +
   # --- display percentages
   geom_text(data = . %>% filter(p<=.25),
             aes(label = paste0(100*p,"%")),
@@ -450,13 +394,14 @@ df.plot %>%
   geom_text(data = . %>% filter(p>.25),
             aes(label = paste0(100*p,"%")),
             color = "white", size = 2) +
+  
   # --- display color-coded pitch in axes
   geom_point(data = df.plot.pitch,
              aes(x, y, color = pitch), size = 4, show.legend = FALSE) +
   geom_text(data = df.plot.pitch,
-             aes(x, y, label = pitch), color = "white", size = 2, show.legend = FALSE) +
+             aes(x, y, label = LETTERS[pitch]), color = "white", size = 2, show.legend = FALSE) +
   
-  scale_color_viridis_c() +
+  scale_color_viridis_c(end = 0.8) +
   scale_x_continuous(name = "to\n", position = "top") +
   scale_y_reverse(name = "from\n") +
   scale_fill_gradient(name = "transition probability",
@@ -482,9 +427,9 @@ df.plot %>%
 g.transitions
 ```
 
-### Reordering
+## Reordering (fig. 1b)
 
-```{r}
+```{r, fig.width = 3, fig.height=1.5}
 #| output: false
 
 # Generate Markov sequences
@@ -532,7 +477,7 @@ df.plot %>%
   ggh4x::geom_pointpath(data = df.plot %>% arrange(desc(entropy)),
                aes(x = idx, y = y, group = interaction(class,rank)),
                mult = 0.4, color = "black", linewidth = 0.3,
-               arrow = arrow(length=unit(.2, 'cm'))) +
+               arrow = arrow(type = "closed", angle = 25, length=unit(.15, 'cm'))) +
   # --- stimuli
   geom_point(size = 4, show.legend = F) +
   # --- stimuli ranks
@@ -540,7 +485,7 @@ df.plot %>%
   
   scale_x_continuous(name = "sequence index", breaks = 1:n.samples) +
   scale_y_continuous(breaks = c(1,2), labels = c("OR","RD"), position = "left") +
-  scale_color_viridis_c() +
+  scale_color_viridis_c(end = 0.8) +
   coord_cartesian(clip = "off") +
   
   theme(axis.title.y = element_blank(),
@@ -552,17 +497,17 @@ df.plot %>%
 g.reordering
 ```
 
-### Prediction types
+## Prediction types (fig. 2a)
 
 Presented vs. most likely
 
-```{r, fig.width=2.5, fig.height=5.}
+```{r, fig.width=2.5, fig.height=3}
 #| output: false
 
 # Generate Markov sequences
 n.samples <- 6
 stims <- mat.T
-set.seed(12871) #128764
+set.seed(12871) 
 for (entropy in names(stims)) {
   stims[[entropy]] <- vector("numeric", n.samples)
   stims[[entropy]][1] <- 4#sample(1:4, 1)
@@ -578,7 +523,8 @@ df.plot <- stims %>% as.tibble() %>%
   mutate(entropy = factor(entropy, levels = rev(names(stims)))) %>% 
   group_by(entropy) %>% mutate(actual = lead(class),
                                mostlikely = ifelse(class==1, 4, class-1)) %>% 
-  pivot_longer(c(actual,mostlikely), names_to = "status", values_to = "class.pred")
+  pivot_longer(c(actual,mostlikely), names_to = "status", values_to = "class.pred") %>% 
+  filter(entropy != "RD")
 
 # Plot
 df.plot %>% 
@@ -587,28 +533,30 @@ df.plot %>%
   
   geom_segment(data = df.plot %>% filter(status == "mostlikely", idx != n.samples),
                aes(x = idx, xend = idx+1, y = class, yend = class.pred, linetype = as.factor(sign(class.pred-class))),
-               arrow = arrow(type = "closed", length = unit(6,"pt")),
+               #arrow = arrow(type = "closed", length = unit(6,"pt")),
                color = "grey30", show.legend = F) +
   
-  geom_point(aes(fill = class), size = 2.5, shape = 21, color = "white", show.legend = T) +
+  geom_point(aes(fill = class), size = 3, shape = 21, color = "white", show.legend = T) +
   
   geom_point(data = df.plot %>% filter(status == "mostlikely", idx != n.samples),
-             aes(x = idx+1, y = class.pred, color = "grey30"),
-             size = 2.5, shape = 1) +
+             aes(x = idx+1, y = class.pred, color = class.pred),
+             size = 2.5, shape = 8) +
   # geom_point(data = df.plot %>% filter(status == "mostlikely", idx != n.samples),
   #            aes(x = idx+1, y = class.pred), size = 2, shape = 8) +
   
   scale_x_continuous(name = "sequence index", breaks = 1:n.samples) +
   scale_y_continuous(name = "") +
-  scale_color_identity(guide = "legend", name = "", labels = "most likely") +
-  scale_fill_viridis_c(guide = "legend", name = "", labels = c("","","","actually presented")) +
+  # scale_color_identity(guide = "legend", name = "", labels = "most likely") +
+  scale_color_viridis_c(end = 0.8, guide = "legend", name = "", labels = c("","","","most likely")) +
+  scale_fill_viridis_c(end = 0.8, guide = "legend", name = "", labels = c("","","","actually presented")) +
   
   guides(linetype = F) +
   coord_cartesian(clip = "off") +
   expand_limits(x = c(0.9,6.1), y = c(0.3,4.7)) +
   # labs(caption = str_wrap("Colored points represent actual stimuli, grey arrows and open circles represent predictions from current stimulus.", width = 70)) +
   
-  guides(color = guide_legend(order = 1, override.aes = list(color = "grey50")),
+  guides(#color = guide_legend(order = 1, override.aes = list(color = "grey50")),
+         color = guide_legend(order = 1),
          fill = guide_legend(order = 2)) +
   theme(plot.caption = element_text(size = 6),
         axis.text.y = element_blank(),
@@ -627,42 +575,8 @@ df.plot %>%
 g.mostlikely
 ```
 
-### Assemble
 
-```{r}
-#| fig-width: 8
-#| fig-height: 4.5
-#| column: page
-#| lightbox:
-#|   group: r-graph
-
-((g.pitch + labs(title = "")) +
-    plot_spacer() +
-    (g.transitions + labs(title = "Transition matrices")) +
-    plot_layout(widths = c(0.5,0.2,15))) / (
-wrap_elements(full = g.reordering + labs(title="Reordering of random data")) +
-   plot_spacer() +
-   (g.mostlikely + labs(title="Predictions")) +
-  plot_layout(widths = c(1,0.05,1))
-) + 
-  plot_layout(heights = c(1.4,1)) +
-  plot_annotation(tag_levels = "a") &
-  
-  theme(plot.title = element_text(size = 12),
-        plot.title.position = "panel",
-        plot.tag.position = c(0, 1),
-        plot.tag = element_text(size = 14, hjust = 0, vjust = 1, face = "bold")) -> g
-
-g
-
-if (save) {
-  g %>% ggsave(filename = "./figures/fig1.png", width = 8, height = 4.5, dpi = 300, device = ragg::agg_png)
-}
-```
-
-**Figure 1.** Original experimental design and reanalyses. **(a)** Demarchi et al. (2019) presented four different pure sinusoidal tones, logarithmically spaced in pitch. **(b)** Four types of sequences of sounds were generated, each using a Markov chain characterized by a distinct transition matrix. The transition matrices were manipulated so that (i) probabilities of repetitions (diagonal elements) were the same across sounds and sequences, (ii) the identity of the most likely next sound was the same in all sequences, and (iii) the entropy of the generated sequences decreased from RD (random) to MM (midminus), to MP (midplus) to OR (ordered). **(c)** In our reanalysis, we created a new control dataset by reordering epochs from randomly sequences according to the sequence order of higher entropy conditions (here, OR). By construction, any above chance level decoding accuracy on this control dataset could only be attributed to sequence effects and not to brain representations. (d) Demarchi et al. (2019) decoded the sound that was actually presented to the participants (colored circles), which was not always the most likely one given the previous stimulus (asterisks); the lower the entropy, the more discrepancy between the two. In our reanalysis, we decoded both types of prediction.
-
-## ORIGINAL & REORDERED
+# REPLICATION & REORDERING (empirical null)
 
 ### Load
 
@@ -849,55 +763,6 @@ df.plot.0.corr
 ```
 
 
-
-### Plot v1
-
-```{r}
-#| fig-width: 8
-#| fig-height: 7
-#| column: page
-#| lightbox:
-#|   group: r-graph
-
-g.base <- list(sound = c(), omission = c())
-g.diff <- list(sound = c(), omission = c())
-
-for (s in c("sounds","omissions")) {
-  # ORIGINAL & REORDERED
-  df.plot.0 %>% 
-    filter(stim == s, manip != "ORIGINAL – REORDERED") %>% 
-    mutate(manip = paste0("Test data: ", manip)) %>% 
-    plot.base(col.pal = col.pal.base,
-              z.breaks = acc.breaks.base,
-              z.labels = acc.labels.base) +
-    facet_grid(direction ~ manip) +
-    labs(title = paste0(toupper(s), ", decoding presented")) -> g.base[[s]]
-  
-  # DIFFERENCE
-  df.plot.0 %>%
-    filter(stim == s, manip == "ORIGINAL – REORDERED") %>% 
-    plot.base(col.pal = col.pal.diff,
-              z.breaks = acc.breaks.diff,
-              z.labels = acc.labels.diff) +
-    facet_grid(direction ~ manip) +
-    labs(title = toupper(s)) +
-    theme(axis.title.y = element_blank()) -> g.diff[[s]]
-}
-
-(g.base[["sounds"]] + g.diff[["sounds"]] + plot_layout(widths = c(2, 1))) /
-  (g.base[["omissions"]] + g.diff[["omissions"]] + plot_layout(widths = c(2, 1))) +
-  plot_annotation(tag_levels = c("a","b","c","d")) &
-  theme(plot.tag.position = c(0, 1)) -> g
-
-g
-
-if (save) {
-  g %>% ggsave(filename = "./figures/fig2.png", width = 8, height = 7.5, dpi = 300, device = ragg::agg_png)
-}
-```
-
-**Figure 2.** Time-generalization decoding of sounds presented in structured sequences with a classifier trained on random sound sequences. **(a, left)** replicates Demarchi et al. approach (figure 3a in the original publication) where above 25% chance level decoding appears possible several hundreds milliseconds before and after the stimulus. The design of our figure is different in two important aspects. First, we set up the color scale so as to reduce the saturation present in the original figure. Yet, in both the original and replicated analyses, the pre-stimulus decoding peaks in the highly regular condition (OR) at -230ms (i.e. approximately 100ms after the onset of the preceding sound) and exceeds the 25% chance level by less than 1 percentage point. Both analyses also reveal late post-stimulus decoding peaking slightly before 500ms after stimulus onset for train times around 100ms. Second, we have extended the testing time to cover the second stimulus before the target, which revealed below 25% chance level accuracy, suggesting that decoding performance was at least partly driven by statistical dependency between stimuli. **(a, right)** is the same analysis, carried out on random generated data re-ordered to mimic structured sequences (see Methods and fig. 1c). Pre-stimulus decoding is found again and **(b)** differentiation with the original results indicate that it is comparable in temporal pattern and magnitude. Residual pre-stimulus decoding is not statistically significant anymore, late post-stimulus decoding remains present. Note the negative diagonal during the decoded stimulus, which reflects the better tuning of the classifier to data coming from the random condition, as well as the positive upper diagonal during $S_{+1}$ which is due to cropping in reordered data. **(c,d)** Original and re-ordering analyses applied to omitted sounds (figure 3b in the original publication) lead to the same conclusions.
-
 ### Plot "Matters Arising"
 
 #### Initialize
@@ -938,7 +803,7 @@ for (s in c("sounds","omissions")) {
     mutate(manip = recode_factor(manip, 
                                  ORIGINAL = "REPLICATION\n", #  (original dataset)\n
                                  REORDERED = "EMPIRICAL NULL\n")) %>%  # (reordered RD)\n
-    plot.base(col.pal = col.pal.base,
+    plot_base(col.pal = col.pal.base,
               z.breaks = acc.breaks.base,
               z.labels = acc.labels.base) +
     facet_grid(direction ~ manip) -> g
@@ -952,7 +817,7 @@ for (s in c("sounds","omissions")) {
     filter(stim == s, manip == "ORIGINAL – REORDERED") %>%
     mutate(manip = recode_factor(manip,
                                  `ORIGINAL – REORDERED` = "REPLICATION – EMPIRICAL NULL\n")) %>%
-    plot.base(col.pal = col.pal.diff,
+    plot_base(col.pal = col.pal.diff,
               z.breaks = acc.breaks.diff,
               z.labels = acc.labels.diff) +
     facet_grid(direction ~ manip) +
@@ -998,7 +863,7 @@ for (s in c("sounds", "omissions")) {
                                  ORIGINAL = "REPLICATION\n", #  (original dataset)\n
                                  REORDERED = "EMPIRICAL NULL\n")) %>%  # (reordered RD)\n
     mutate(direction = "") %>% 
-    plot.base(col.pal = col.pal.corr,
+    plot_base(col.pal = col.pal.corr,
               z = "r",
               z.breaks = corr.breaks,
               z.labels = corr.labels) +
@@ -1014,7 +879,7 @@ for (s in c("sounds", "omissions")) {
     mutate(manip = recode_factor(manip,
                                  `ORIGINAL – REORDERED` = "REPLICATION – EMPIRICAL NULL\n")) %>% 
     mutate(direction = "") %>% 
-    plot.base(col.pal = col.pal.corr,
+    plot_base(col.pal = col.pal.corr,
               z = "r",
               z.breaks = corr.breaks,
               z.labels = corr.labels) +
@@ -1178,7 +1043,7 @@ acf_plot(resid(m.fx_dir.rd_t.ar.6))
 
 ```
 
-## THEORETICAL
+# THEORETICAL NULL
 
 ### Load confusion matrices & calculate
 
@@ -1434,53 +1299,7 @@ df.plot.maths %<>%
 
 ```
 
-### Plot v1
 
-```{r}
-#| fig-width: 8
-#| fig-height: 4
-#| column: page
-#| lightbox:
-#|   group: r-graph
-
-## Plot
-# THEORETICAL & REORDERED
-df.plot.maths %>% 
-  filter(manip != "diff") %>% 
-  mutate(manip = factor(manip, levels = c("THEORETICAL","REORDERED"))) %>% 
-  # mutate(manip = map_chr(manip, \(x){ifelse(x=="diff", "THEORETICAL – REORDERED", x)})) %>% 
-  plot.base(col.pal = col.pal.base,
-            z.breaks = acc.breaks.base,
-            z.labels = acc.labels.base,
-            contour = F) +
-  facet_grid(entropy ~ manip) -> g.base
-
-# DIFFERENCE
-df.plot.maths %>%
-  filter(manip == "diff") %>% 
-  mutate(manip = "THEORETICAL – REORDERED") %>% 
-  plot.base(col.pal = col.pal.diff,
-            z.breaks = acc.breaks.diff,
-            z.labels = acc.labels.diff,
-            contour = F) +
-  facet_grid(entropy ~ manip) +
-  theme(axis.title.y = element_blank(),
-        strip.text = element_text(vjust = 0)) -> g.diff
-
-# ASSEMBLE
-(g.base + g.diff + plot_layout(widths = c(2, 1))) +
-  plot_annotation(tag_levels = c("a","b")) &
-  theme(plot.tag.position = c(0, 1),
-        plot.tag = element_text(size = 14, hjust = 0, vjust = 1, face = "bold")) -> g
-
-g
-
-if (save) {
-  g %>% ggsave(filename = "./figures/fig3.png", width = 8, height = 3, dpi = 300, device = ragg::agg_png)
-}
-```
-
-**Figure 3.** Based on the transition matrix used to generate sequences of stimuli and the confusion matrix of a classifier trained on random sequence data, it is possible to calculate the expected accuracy of the classifier when tested on structured sequences. The results align closely with the accuracy measured from reordered random data (see figure 2a).
 
 ### Plot "Matters Arising"
 
@@ -1530,7 +1349,7 @@ g.maths.diff <- list()
 df.plot.maths %>% 
   filter(manip != "REPLICATION – THEORETICAL NULL\n") %>% 
   # mutate(manip = ifelse(manip=="ORIGINpaste0("Test data: ", manip)) %>% 
-  plot.base(col.pal = col.pal.base,
+  plot_base(col.pal = col.pal.base,
             z.breaks = acc.breaks.base,
             z.labels = acc.labels.base) +
   facet_grid(direction ~ manip) -> g
@@ -1543,7 +1362,7 @@ g.maths.base[["acc"]] <- g %>% add_onset(df.labels.onset.stim %>%
 # --- DIFFERENCE
 df.plot.maths %>%
   filter(manip == "REPLICATION – THEORETICAL NULL\n") %>% 
-  plot.base(col.pal = col.pal.diff,
+  plot_base(col.pal = col.pal.diff,
             z.breaks = acc.breaks.diff,
             z.labels = acc.labels.diff) +
   facet_grid(direction ~ manip) +
@@ -1576,7 +1395,7 @@ df.plot %>%
   filter(manip != "REPLICATION – THEORETICAL NULL\n") %>% 
   # mutate(manip = paste0("Test data: ", manip)) %>% 
   mutate(direction = "") %>% 
-  plot.base(col.pal = col.pal.corr,
+  plot_base(col.pal = col.pal.corr,
             z = "r",
             z.breaks = corr.breaks,
             z.labels = corr.labels) +
@@ -1592,7 +1411,7 @@ g.maths.base[["corr"]] <- g %>% add_onset(df.labels.onset.stim %>%
 df.plot %>%
   filter(manip == "REPLICATION – THEORETICAL NULL\n") %>% 
   mutate(direction = "") %>% 
-  plot.base(col.pal = col.pal.corr,
+  plot_base(col.pal = col.pal.corr,
             z = "r",
             z.breaks = corr.breaks,
             z.labels = corr.labels) +
@@ -1617,7 +1436,7 @@ g.fig1.2.corr <- (
 g.fig1.2.corr
 ```
 
-## PREDICTING MOST LIKELY
+# PREDICTING MOST LIKELY
 
 ### Load data
 
@@ -1791,52 +1610,7 @@ df.plot.ml.corr
 
 ```
 
-### Plot v1
 
-```{r}
-#| fig-width: 8
-#| fig-height: 4
-#| column: page
-#| lightbox:
-#|   group: r-graph
-
-# ORIGINAL & REORDERED
-df.plot.ml %>% 
-  filter(manip != "ORIGINAL – REORDERED") %>% 
-  mutate(manip = paste0("Test data: ", manip)) %>% 
-  # mutate(manip = case_match(manip, ""~"Test data: ORIGINAL",
-  #                           "_reord"~"Test data: RANDOM REORDERED")) %>% 
-  plot.base(col.pal = col.pal.base,
-            z.breaks = acc.breaks.base,
-            z.labels = acc.labels.base) +
-  facet_grid(direction ~ manip) +
-  labs(title = paste0(toupper("sounds"), ", decoding most likely")) -> g.base
-
-# DIFFERENCE & AVERAGE
-df.plot.ml %>%
-  filter(manip == "ORIGINAL – REORDERED") %>% 
-  plot.base(col.pal = col.pal.diff,
-            z.breaks = acc.breaks.diff,
-            z.labels = acc.labels.diff) +
-  facet_grid(direction ~ manip) +
-  labs(title = toupper("sounds")) +
-  theme(axis.title.y = element_blank(),
-        strip.text = element_text(vjust = 0)) -> g.diff
-
-# ASSEMBLE
-(g.base + g.diff + plot_layout(widths = c(2, 1))) +
-  plot_annotation(tag_levels = c("a","b")) &
-  theme(plot.tag.position = c(0, 1),
-        plot.tag = element_text(size = 14, hjust = 0, vjust = 1, face = "bold")) -> g
-
-g
-
-if (save) {
-  g %>% ggsave(filename = "./figures/fig4.png", width = 8, height = 4, dpi = 300, device = ragg::agg_png)
-}
-```
-
-**Figure 4.** Time-generalization decoding of the sound most likely to be presented at t=0, given the identity of the previous sound, with a classifier trained on random sequence data. Compared to the original approach (replicated here in figure 2a, left), this approach tests the more plausible hypothesis that the brain holds the strongest predictive representation for the most statistically likely stimulus, which is not always the actually presented one (see Methods and figure 1d). **(a)** Direct comparison of decoding performance with the 25% chance level appear to suggest negative performance, but this is largely due to statistical dependency between the the most likely and the actual sound, as is confirmed by decoding reordered random sequences. **(b)** After proper control of statistical dependency effects, a robust but weak (\<1% point) above chance level decoding remains between +80 and +230ms.
 
 ### Plot "Matters Arising"
 
@@ -1856,7 +1630,7 @@ for (s in c("sounds")) {
     filter(t_test >=-333, t_test <= 0) %>% 
     filter(stim == s, manip != "ORIGINAL – REORDERED") %>% 
     mutate(manip = paste0(manip)) %>% #"Test data: ", 
-    plot.base(col.pal = col.pal.base,
+    plot_base(col.pal = col.pal.base,
               z.breaks = acc.breaks.base,
               z.labels = acc.labels.base,
               legend.position = "right") +
@@ -1870,7 +1644,7 @@ for (s in c("sounds")) {
     filter(!grepl("AVERAGE",direction)) %>% 
     filter(stim == s, manip == "ORIGINAL – REORDERED") %>% 
     mutate(manip = "DIFF") %>% 
-    plot.base(col.pal = col.pal.diff,
+    plot_base(col.pal = col.pal.diff,
               z.breaks = acc.breaks.diff,
               z.labels = acc.labels.diff,
               legend.position = "right") +
@@ -1896,7 +1670,7 @@ for (s in c("sounds")) {
     filter(stim == s, manip != "ORIGINAL – REORDERED") %>% 
     mutate(manip = paste0(manip)) %>% #"Test data: ", 
     mutate(direction = "") %>% 
-    plot.base(col.pal = col.pal.corr,
+    plot_base(col.pal = col.pal.corr,
               z = "r",
               z.breaks = corr.breaks,
               z.labels = corr.labels,
@@ -1910,7 +1684,7 @@ for (s in c("sounds")) {
     filter(stim == s, manip == "ORIGINAL – REORDERED") %>%
     mutate(manip = "DIFF") %>% 
     mutate(direction = "") %>%
-    plot.base(col.pal = col.pal.corr,
+    plot_base(col.pal = col.pal.corr,
               z = "r",
               z.breaks = corr.breaks,
               z.labels = corr.labels,
@@ -1951,106 +1725,6 @@ if (save) {
 ```
 
 
-## Figure 5
-
-### Load data
-
-```{r}
-#| cache: true
-
-# df.trainintest <- tibble()
-# for (manip in c("","_reord")) { 
-#   
-#   for (entropy in tolower(names(mat.T))) {
-#     
-#     df.trainintest %<>% bind_rows(
-#       load_loop_subj(folder = "reorder_random",
-#                      condition = paste0(entropy,"_to_",entropy,manip)) %>% 
-#         mutate(manip = manip, entropy = entropy)
-#     )
-#   }
-# }
-
-df.traineqtest.mean <- tibble()
-df.traineqtest.subj <- tibble()
-for (manip in c("","_reord")) { 
-  
-  for (entropy in tolower(names(mat.T))) {
-    
-      tmp <- load_loop_subj(folder = "reorder_random",
-                     condition = paste0(entropy, manip, "_to_", entropy, manip),
-                     group.mean = FALSE, diag = TRUE)
-      
-      df.traineqtest.mean %<>% bind_rows(
-        tmp[[2]] %>% mutate(manip = manip, entropy = entropy)
-        )
-      df.traineqtest.subj %<>% bind_rows(
-        tibble(manip = manip, entropy = entropy, array = list(tmp[[1]]))
-        )
-  }
-}
-```
-
-### Prepare data
-
-```{r}
-
-# Factorize & filter
-df.plot.teqt <- df.traineqtest.mean %>% 
-  mutate(entropy = factor(toupper(entropy), levels = rev(names(mat.T)))) %>% 
-  # --- convert indices to time
-  mutate(across(starts_with("t_"), ~(dt*(.-1)-700)))
-  
-
-# Add difference scores
-df.plot.teqt %<>% 
-  mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>% 
-  pivot_wider(names_from = manip, values_from = accuracy) %>%
-  mutate(diff = original - reordered) %>% 
-  pivot_longer(cols=c(original,reordered,diff),
-               names_to = "manip", values_to = "accuracy") %>% 
-  mutate(manip = (recode_factor(manip, original = "original", reordered = "reordered",
-                                diff = "original – reordered",)))
-
-# Calculate group mean & CIs
-df.plot.teqt %<>%
-  group_by(t_train, entropy, manip) %>% 
-  summarise(accuracy.ci = 2*sd(accuracy)/sqrt(n.subj),
-            accuracy.mean = mean(accuracy),
-            .groups = "drop")
-```
-
-### Plot
-
-This one trains on entropy data and tests on random-reordered:
-
-```{r}
-#| column: page
-#| lightbox:
-#|   group: r-graph
-
-df.plot.teqt %>% 
-  ggplot(aes(x = t_train, y = accuracy.mean, color = entropy, fill = entropy)) +
-  facet_grid(manip ~ ., scales = "free_y") +
-  geom_hline(data = tibble(manip = factor(c("original", "reordered", "original – reordered"),
-                                          levels = levels(df.plot$manip)),
-                           chance = c(.25, .25, 0)),
-             aes(yintercept = chance)) +
-  geom_ribbon(aes(ymin = accuracy.mean-accuracy.ci, ymax = accuracy.mean+accuracy.ci),
-              color = NA,
-              alpha = 0.3) +
-  geom_line() +
-  geom_vline(xintercept = 0, color = col.lines) +
-  geom_vline(xintercept = 333*c(-2,-1,1,2), linetype = 2, color = col.lines) +
-  scale_x_continuous(name = " peri-stimulus time (ms)",
-                     breaks = scales::pretty_breaks(8)) +
-  labs(title = "Train & test on same condition data",
-       subtitle = "Only test data is reordered",
-       y = "accuracy")
-```
-
-**Figure 5.** Decoding of sounds in structured sequences with a classifier trained on the same sequences. During the presentation of the stimulus itself (t between 0 and 333ms), all classifiers have the exact same performance on random sequence data ??? \<- this is not expected: the random classifier should perform better than all others, as it is better tuned to random data (same logic than behind the negative diagonal in figure 2b)
-
 # Supplementary figures
 
 ## Confusion matrices
@@ -2077,7 +1751,7 @@ for (s in list.subj) {
 mat.C.mean <- mat.C.all %>% apply(c(1,2,3,4), mean)
 
     
-df.confusion <- matrix_to_df2(matC.mean[22,22,,], "from", "to", "p") %>% 
+df.confusion <- matrix_to_df2(mat.C.mean[22,22,,], "from", "to", "p") %>% 
   mutate(label = paste0("a[",from,to,"]"))
 df.confusion %>% 
   ggplot(aes(x = to, y = from, fill = p)) +
@@ -2118,50 +1792,4 @@ matrix_to_df2(mat.T$MP, "from", "to", "p") %>%
         axis.title = element_text(face = "italic"),
         legend.box.spacing = unit(2,"mm"),
         )
-  # plot_annotation(tag_levels = "a")
-
-# Other visualization style
-df.plot <- left_join(matrix_to_df2(matC.mean[22,22,,], "from", "to", "C"),
-                     matrix_to_df2(mat.T$MP, "from", "to", "T")) %>% 
-  pivot_longer(names_to = "matrix", values_to = "p", cols = c(C,T))
-
-df.plot %>% 
-  ggplot(aes(x = to, y = p, fill = matrix)) +
-  facet_grid(rows = "from")  +
-  geom_hline(yintercept = .25) +
-  geom_col(position = "dodge")
-```
-
-### Group average, multiple time points
-```{r}
-#| fig-width: 6
-#| fig-height: 2
-#| column: page
-#| lightbox:
-#|   group: r-graph
-
-df.confusion <- tibble()
-for (i in 1:dim(mat.C.mean)[1]) {
-  df.confusion %<>% bind_rows(
-    mat.C.mean[i,i,,] %>% matrix_to_df2("from", "to", "p") %>% mutate(t = i)
-  )
-}
-
-df.confusion %>% 
-  mutate(t = dt*(t-1)) %>% 
-  filter(t%%30==0) %>% 
-  ggplot(aes(x = to, y = from, fill = p)) +
-  facet_wrap(~ t, ncol = 6, labeller = label_both, strip.position = "bottom") +
-  geom_tile() + 
-  scale_x_continuous(name = "predicted class", position = "top") +
-  scale_y_reverse(name = "true class") +
-  scale_fill_gradient2(name = "transition probability",
-                      low = "white", high = "black",
-                      labels = ~str_replace(., "^0.","."),
-                      limits = c(0.15,0.35), oob = scales::squish) +
-  guides(fill = guide_colorbar(barwidth = 0.5,
-                               ticks = F, title.vjust = 1)) +
-  coord_equal(xlim = c(0.5,4.5), ylim = rev(c(0.5,4.5)),
-              expand = F, clip = "off") +
-  theme()
 ```
