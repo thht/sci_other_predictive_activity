@@ -23,13 +23,6 @@ tmin, tmax = -0.7, 0.7
 crop_twice = 0
 v2only = 1
 
-## Initialize list of scores (with cross_validation)
-all_cv_rd_to_or_scores = list()
-all_cv_rd_to_orrd_scores = list()
-all_cv_rd_to_mm_scores = list()
-all_cv_rd_to_mmrd_scores = list()
-all_cv_rd_to_mp_scores = list()
-all_cv_rd_to_mprd_scores = list()
 # Start the main loop analysis - Loop on participant
 #for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
 
@@ -310,9 +303,6 @@ for g,inds in grp.groups.items():
     # save scores
     np.save(op.join(results_folder, 'cv_rd_to_mm_scores.npy'), cv_rd_to_mm_score)
     np.save(op.join(results_folder, 'cv_rd_to_mm_reord_scores.npy'), cv_rd_to_mmrd_score)
-    # append to keep the results in the python session
-    all_cv_rd_to_mm_scores.append(cv_rd_to_mm_score)
-    all_cv_rd_to_mmrd_scores.append(cv_rd_to_mmrd_score)
 
     ##################################################################
     # Test for midplus (and reorder-midplus)
@@ -339,7 +329,7 @@ for g,inds in grp.groups.items():
     np.save(op.join(results_folder, 'cv_rd_to_mp_reord_scores.npy'), cv_rd_to_mprd_score)
 
     if v2only:
-        print("Finished sucessfully")
+        print("V2 (no CV) Finished sucessfully")
         sys.exit(0)
 
     ##################################################################

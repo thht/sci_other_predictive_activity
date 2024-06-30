@@ -1,25 +1,26 @@
-from base import gat_stats
 import os.path as op
 import os, sys
 import numpy as np
-import mne
-from mne.decoding import cross_val_multiscore, SlidingEstimator, GeneralizingEstimator
+import argparse
+import pandas as pd
 import matplotlib.pyplot as plt
+
+import mne
+from mne.decoding import cross_val_multiscore, SlidingEstimator, GeneralizingEstimator, LinearModel
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.pipeline import make_pipeline
 from sklearn.model_selection import StratifiedKFold
-from scipy.stats import spearmanr
-from tqdm import tqdm
 from collections import Counter
-
-import os.path as op
-import mne
-from sklearn.pipeline import make_pipeline
-from mne.decoding import GeneralizingEstimator, LinearModel
 
 from base import corresp
 from base import events_simple_pred
 from base import cond2code
+from base import events_omission, events_sound
+from base import reorder
+from base import getFiltPat
+
+os.environ['DEMARCHI_DATA_PATH'] ='/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi'
+so.environ['TEMP_DATA_DEMARCHI'] = '$SCRATCH/memerr/demarchi'
 
 path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
 path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
@@ -34,7 +35,6 @@ path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
 # Initialize list of scores (with cross_validation)
 
 # Import the argparse module
-import argparse
 
 # Create an ArgumentParser object
 parser = argparse.ArgumentParser()
@@ -59,39 +59,39 @@ shuffle_cv = bool(args.shuffle_cv)
 
 
 # define tmin and tmax
-from base import events_omission, events_sound
 tmin, tmax = -0.7, 0.7
 events_all = events_sound + events_omission
-del_processed = 1  # when reorder. =1 means Romain version
-cut_fl = 0 # True in 1st and False in last Romain ver
-reord_narrow_test = 0 # True in 1st and False in last Romain ver 
+del_processed = 1  
+cut_fl = 0 
+reord_narrow_test = 0 
 #gen_est_verbose = True
 gen_est_verbose = False # def True
 dur = 200
 nsamples = 33
 
-sids_to_use = [args.subject]
-#sids_to_use = [12]
 
-import pandas as pd
+# parse directory names from the data directory
 rows = [ dict(zip(['subj','block','cond','path'], v[:-15].split('_') + [v])  ) for v in os.listdir(path_data)]
-df = pd.DataFrame(rows)
+df0 = pd.DataFrame(rows)
+df = df0.copy()
 df['sid'] = df['subj'].apply(lambda x: corresp[x])
 
+# which subject IDs to use
+sids_to_use = [args.subject]
 df = df.query('sid.isin(@sids_to_use)')
-#TODO: run with arg of bad subject
 
+# check we have complete data (all conditions for every subject)
 grp = df.groupby(['subj'])
 assert grp.size().min() == grp.size().max()
 assert grp.size().min() == 4
 
-
+# iterating over subjects (if we selected one, then process one subject)
 for g,inds in grp.groups.items():
     subdf = df.loc[inds]
 
+    # get paths to datasets for each entropy condition per subject
     subdf= subdf.set_index('cond')
     subdf = subdf.drop(columns=['subj','block','sid'])
-
     meg_rd = subdf.to_dict('index')['random']['path']
     meg_or = subdf.to_dict('index')['ordered']['path']
     print(meg_rd, meg_or)
@@ -111,7 +111,8 @@ for g,inds in grp.groups.items():
     cond2epochs = {}
     cond2raw   = {}
 
-    p0 = op.join( os.path.expandvars('$SCRATCH/memerr/demarchi') , meg_rd[:-15] )
+    # load or recalc filtered epochs
+    p0 = op.join( os.path.expandvars('$TEMP_DATA_DEMARCHI') , meg_rd[:-15] )
     if op.exists(op.join(p0, 'flt_rd-epo.fif')) and (not force_refilt):
         print('!!!!!   Loading precomputed filtered epochs from ',p0)
         #epochs_rd = mne.read_epochs( op.join(p0, 'flt_rd-epo.fif'))
@@ -132,7 +133,7 @@ for g,inds in grp.groups.items():
     else:
         print('!!!!!   (Re)compute filtered raws from ',p0)
         for cond,condcode in cond2code.items():
-            fnf = op.join(path_data, subdf.to_dict('index')[cond] )
+            fnf = op.join(path_data, subdf.to_dict('index')[cond]['path'] )
             # Read raw files
             raw = mne.io.read_raw_fif(fnf, preload=True)
             print('Filtering ')
@@ -140,11 +141,11 @@ for g,inds in grp.groups.items():
             if not op.exists(p0):
                 os.makedirs(p0)
             raw.save( op.join(p0, f'flt_{condcode}-raw.fif'), overwrite = True )
+            # Get events
+            events = mne.find_events(raw, shortest_event=1)
             raw.pick_types(meg=True, eog=False, ecg=False,
                           ias=False, stim=False, syst=False)
             cond2raw[cond] = raw
-            # Get events
-            events = mne.find_events(raw, shortest_event=1)
 
             # Create epochs
             epochs = mne.Epochs(raw, events,
@@ -160,7 +161,9 @@ for g,inds in grp.groups.items():
     # remove omission and following trials in random trials
     lens_ext = []
     cond2counts = {}
+    # cycle over four entropy conditions
     for cond,epochs in cond2epochs.items():
+        # just in case save numbers before removing omission trials
         lens_ext += [(cond+'_keepomission',len(epochs))  ]
         cond2counts[cond+'_keepomission'] = Counter(epochs.events[:,2])
 
@@ -176,12 +179,12 @@ for g,inds in grp.groups.items():
 
         cond2counts[cond] = Counter(cond2epochs[cond].events[:,2])
 
-    epochs_rd_init = cond2epochs['random'].copy()
 
     ################################################################
     # reorder random as ...
     ################################################################
-    from base import reorder
+
+    epochs_rd_init = cond2epochs['random'].copy()
 
     cond2epochs_reord = {}
     cond2orig_nums_reord = {}
@@ -190,23 +193,38 @@ for g,inds in grp.groups.items():
     cond2orig_nums_sp_reord = {}
 
     reorder_pars = dict(del_processed= del_processed, cut_fl=cut_fl, tmin=tmin, tmax=tmax, dur=dur, nsamples=nsamples)
+    # cycle over four entropy conditions (targets of reordering)
     for cond,epochs in cond2epochs.items():
+        # original random events
         random_events = epochs_rd_init.events.copy()
+        # target events
         events0 = epochs.events.copy()
         
+        # reorder random events to another entropy condition
         epochs_reord0, orig_nums_reord0 = reorder(random_events, events0, raw_rd, **reorder_pars) 
         cond2epochs_reord[cond] = epochs_reord0
         cond2orig_nums_reord[cond] = orig_nums_reord0
 
         cond2counts[cond+'_reord'] = Counter(cond2epochs_reord[cond].events[:,2])
 
-        #-----------------
+        #######################################################
+        ##############   reorder simple prediction
+        #######################################################
+
+        # first we transform events from the current entropy condtion into it's "simple prediction" (most probable next event) verion 
         events = events_simple_pred(epochs.events.copy(), cond2code[cond])
+        # then we do the reorderig like before, but in this case the target events are the transformed events, not the true ones
         epochs_reord, orig_nums_reord = reorder(random_events, events, raw_rd, **reorder_pars) 
         cond2epochs_sp_reord[cond] = epochs_reord
         cond2orig_nums_sp_reord[cond] = orig_nums_reord
 
         cond2counts[cond+'_sp_reord'] = Counter(cond2epochs_sp_reord[cond].events[:,2])
+
+
+    # save counts of all classes to process later (not in this script)
+    fnf = op.join(results_folder, f'cond2counts.npz' )
+    print('Saving ',fnf)
+    np.savez(fnf , cond2counts )
 
     ###################################################################
     ########################     CV
@@ -214,6 +232,7 @@ for g,inds in grp.groups.items():
     print("------------   Starting CV")
     cv = StratifiedKFold(nfolds, shuffle=shuffle_cv)
 
+    # we need to know minimum number of trials to use it always (they don't actually differ that much but it reduces headache with folds correspondance)
     lens = [ len(ep) for ep in cond2epochs.values() ]
     lens += [ len(ep) for ep in cond2epochs_reord.values() ]
     lens += [ len(ep) for ep in cond2epochs_sp_reord.values() ]
@@ -227,7 +246,8 @@ for g,inds in grp.groups.items():
     if args.exit_after == 'prep_dat':
         sys.exit(0)
 
-    # helper function
+
+    # helper function, check if the key is in the dict, if not -- creates it, otherwise add to it
     def dadd(d,k,v):
         if k in d:
             d[k] += [v]
@@ -240,12 +260,13 @@ for g,inds in grp.groups.items():
     else:
         clf = make_pipeline(LinearDiscriminantAnalysis())
     clf = GeneralizingEstimator(clf, n_jobs=-1, scoring='accuracy', verbose=gen_est_verbose)
-    condcond2scores = {} # tuples of cond and reord 2 scores
+    #condcond2scores = {} # tuples of cond and reord 2 scores
 
+    # cycle over entropies
     for cond,epochs in cond2epochs.items():
         print(f"-----  CV for {cond}")
 
-        # keep only the same number of trials in ordered
+        # keep only the same number of trials for all conditions
         epochs = epochs[:minl]  
         # get the X and Y for each condition in numpy array
         X = epochs.get_data()
@@ -263,11 +284,11 @@ for g,inds in grp.groups.items():
         yrd1 = epochs_rd1.events[:, 2]
 
         epochs_sp_reord = cond2epochs_sp_reord[cond]
-        orig_nums_sp_reord = cond2orig_nums_sp_reord[cond] 
+        #orig_nums_sp_reord = cond2orig_nums_sp_reord[cond] 
         #
-        epochs_rd2 = epochs_rd_init[orig_nums_sp_reord][:minl]
-        Xrd2 = epochs_rd2.get_data()
-        yrd2 = epochs_rd2.events[:, 2]
+        #epochs_rd2 = epochs_rd_init[orig_nums_sp_reord][:minl]
+        #Xrd2 = epochs_rd2.get_data()
+        #yrd2 = epochs_rd2.events[:, 2]
 
         y0_ = epochs.events.copy()[:minl]
         y0 = y0_[:, 2] 
@@ -277,16 +298,16 @@ for g,inds in grp.groups.items():
         yreord = yreord_[:, 2]
         yreord_sp = events_simple_pred(yreord_, cond2code[cond])[:, 2]
 
-        Xsp_reord = epochs_sp_reord.get_data()[:minl]
+        #Xsp_reord = epochs_sp_reord.get_data()[:minl]
         ysp_reord_ = epochs_sp_reord.events
         ysp_reord = ysp_reord_[:, 2]
 
+        # get short entropy condition code to generate save filenames
         s = cond2code[cond]
-        scores = {}
+        scores = {} # score type 2 score
 
         filters  = []
         patterns = []
-        from base import getFiltPat
         for train_rd, test_rd in cv.split(Xrd1, yrd1):
             print(f"##############  Starting {cond} fold")
             print('Lens of train and test are :',len(train_rd), len(test_rd) )
@@ -294,6 +315,7 @@ for g,inds in grp.groups.items():
             # Train and test with cross-validation
             clf.fit(Xrd1[train_rd], yrd1[train_rd])  # fit on random
 
+            # to plot patterns later... not very useful in the end, they are too inconsistent
             if extract_filters_patterns:
                 filters_, patterns_ = getFiltPat(clf)
                 filters  += [filters_]
@@ -337,6 +359,7 @@ for g,inds in grp.groups.items():
         # train on non-random and test on same or reord (to make "self" plots)
         filters  = []
         patterns = []
+        # train on NOT (only) random and test on itself
         for train, test in cv.split(X, y0):
             print(f"##############  Starting {cond} fold")
             clf.fit(X[train], y0[train])  
@@ -409,6 +432,7 @@ for g,inds in grp.groups.items():
 
         # TODO: add or to or
 
+        # save everything
         for k,v in scores.items():
             scores[k] = np.array(v)
             fnf = op.join(results_folder, f'cv_{k}_scores.npy' )
