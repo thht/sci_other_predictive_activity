@@ -1036,13 +1036,13 @@ df.plot %>%
   # --- stimuli ranks
   geom_text(aes(label = rank), size = 2, color = "white") +
   
-  scale_x_continuous(name = "sequence index", breaks = 1:n.samples) +
+  scale_x_continuous(name = "trial number", breaks = 1:n.samples) +
   scale_y_continuous(breaks = c(1,2), labels = c("OR","RD"), position = "left") +
   scale_color_viridis_c(end = 0.8) +
   coord_cartesian(clip = "off") +
   
   theme(axis.title.y = element_blank(),
-        axis.text.y = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 10, color = "black", margin = margin(r=-2)),
         axis.title.x = element_text(size = 9, color = "black"),
         panel.grid = element_blank(),
         panel.grid.major.x = element_line(color = "grey80", linewidth = 0.2)) -> g.reordering
@@ -1394,15 +1394,17 @@ g.fig1.2.corr
 
 ```{r, fig.width = 7, fig.height = 11.5}
 
-((g.transitions + theme(panel.spacing.x = unit(5,"mm"))) + free(g.reordering) + plot_layout(widths = c(1.5, 1))) / 
+((g.transitions + theme(panel.spacing.x = unit(5,"mm"), legend.box.margin = margin(t = -30))) +
+   g.reordering + theme(axis.text.x = element_text(margin = margin(t = -15))) +
+   plot_layout(widths = c(1.7, 1))) / 
   ((g.fig1.1.acc / g.fig1.1.corr & theme(axis.text.x = element_text(angle = 45, hjust = 1))) + 
      plot_layout(heights = c(4, 1))) / 
   ((g.fig1.2.acc / g.fig1.2.corr & theme(axis.text.x = element_text(angle = 45, hjust = 1))) + 
      plot_layout(heights = c(4, 1))) +
-  plot_layout(heights = c(1, 4, 4)) +
+  plot_layout(heights = c(1., 4, 4)) +
   plot_annotation(tag_levels = "a") -> g
 
-g
+g 
 
 if (save) {
   g %>% ggsave(filename = "./figures/fig1_MattersArising.png", width = 7, height = 11.5, dpi = 300, device = ragg::agg_png)
