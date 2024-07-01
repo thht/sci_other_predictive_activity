@@ -67,7 +67,9 @@ matrix_to_df2 <- function(array, row.name, col.name, val.name) {
 ### Batch data loading
 
 ```{r}
-load_loop_subj <- function(folder, condition, do.mean = T, diag = F) {
+load_loop_subj <- function(folder, condition, diag = F) {
+  
+  # Individual scores
   array.scores <- array(dim = c(141,141,n.subj))
   i <- 1
   for (s in list.subj) {
@@ -89,29 +91,16 @@ load_loop_subj <- function(folder, condition, do.mean = T, diag = F) {
     i <- i+1
   }
   
-  # Return a dataframe
-  # --- average across participants if requested (default)
-  if (do.mean) {
-    df.out <- array.scores %>% 
-      apply(c(1,2), mean) %>%
-      matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy")
-  # --- or participant-level data, with a subject identifier column
-  } else {
-    if (diag) {
-      df.out <- tibble()
-      for (i in 1:n.subj) {
-        df.out %<>% bind_rows(
-          array.scores[,,i] %>%
-            matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>%
-            filter(t_train == t_test) %>% mutate(id = list.subj[[i]])
-        )
-      }
-    }
-  }
+  # Average across participants
+  df.mean <- array.scores %>% 
+    apply(c(1,2), mean) %>%
+    matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>%
+    # --- convert indices to time
+    mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
+    # --- crop time
+    filter(t_train>=0, (t_train-333) < dt)
   
-  # Crop subject-level data for cluster analysis
-  # array.scores <- array.scores[70:nrow(array.scores),,]
-  return(list(array.scores, df.out))
+  return(list(array.scores, df.mean))
 }
 ```
 
@@ -146,6 +135,7 @@ correlations_fixval <- function(arr.corr) {
 ### Cluster permutation stats
 
 ```{r}
+
 get_signif_clust2d <- function(X, n_permutations = 2**12, n_jobs = -1) {
   # run permutaiton tests
   mne$stats$spatio_temporal_cluster_1samp_test(X,
@@ -575,7 +565,6 @@ df.plot %>%
 g.mostlikely
 ```
 
-
 # REPLICATION & REORDERING (empirical null)
 
 ### Load
@@ -587,7 +576,7 @@ g.mostlikely
 
 tic()
 
-# Load subject-level data and derive grand average
+# Load subject-level data (used for clustering) and derive grand average (used for visualization)
 df.stim.mean <- tibble()
 df.stim.subj <- tibble()
 for (manip in c("","_reord")) { 
@@ -602,7 +591,11 @@ for (manip in c("","_reord")) {
 }
 
 df.stim.mean %<>% mutate(stim = "sounds")
-df.stim.subj %<>% mutate(stim = "sounds") %>% mutate(array = map(array, .f=\(x){x-0.25}))
+df.stim.subj %<>% mutate(stim = "sounds") %>%
+  # --- center decoding accuracy on 0
+  mutate(array = map(array, .f=\(x){x-0.25})) %>% 
+  # --- crop subject-level data for cluster analysis
+  mutate(array = map(array, .f=\(x){x[71:104,,]}))
 
 toc() # ~40s
 ```
@@ -629,7 +622,11 @@ for (manip in c("","_reord")) {
 }
 
 df.omit.mean %<>% mutate(stim = "omissions")
-df.omit.subj %<>% mutate(stim = "omissions") %>% mutate(array = map(array, .f=\(x){x-0.25}))
+df.omit.subj %<>% mutate(stim = "omissions") %>%
+  # --- center decoding accuracy on 0
+  mutate(array = map(array, .f=\(x){x-0.25})) %>% 
+  # --- crop subject-level data for cluster analysis
+  mutate(array = map(array, .f=\(x){x[71:104,,]}))
 
 toc() # ~ 2s
 ```
@@ -651,6 +648,7 @@ df.tmp
 tic()
 df.corr.mean <- tibble()
 df.corr.subj <- tibble() 
+
 ## Loop through condition "manip" and stimulus type "stim
 for (mm in c("original","reordered","diff")) { 
   print(mm)
@@ -672,9 +670,9 @@ for (mm in c("original","reordered","diff")) {
       
       # --- calculate correlation with entropy level coded as 0,1,2(,3), obtaining a 2D array
       if (ss == "sounds") {
-        arr.corr.tmp <- apply(arr.tmp, 1:2, correlations_vecs, vec = 0:3)
+        arr.corr.tmp <- apply(arr.tmp, 1:2, correlations_vecs, vec2 = 0:3)
       } else if (ss == "omissions") {
-        arr.corr.tmp <- apply(arr.tmp, 1:2, correlations_vecs, vec = 1:3)
+        arr.corr.tmp <- apply(arr.tmp, 1:2, correlations_vecs, vec2 = 1:3)
       }
       
       # --- append to already processed subjects in a 3D array
@@ -702,7 +700,7 @@ for (mm in c("original","reordered","diff")) {
     )
   }
 }
-toc() # ~2min
+toc() # ~20 s
 
 ```
 
@@ -718,7 +716,10 @@ tic()
 # Cluster analysis
 df.clusters.0 <- bind_rows(df.stim.subj, df.omit.subj) %>% 
   calculate_diff(f.map = map2, values_to = "array") %>% 
-  cluster_loop_cond(n_permutations = 10000)
+  cluster_loop_cond(n_permutations = 10000) %>% 
+  # --- convert indices to time
+  mutate(t_test = (dt*(t_test-1)-700)) %>% 
+  mutate(t_train = (dt*(t_train-1)))
 
 # Aggregate all data and clean
 df.plot.0 <- bind_rows(df.stim.mean, df.omit.mean) %>%
@@ -728,13 +729,10 @@ df.plot.0 <- bind_rows(df.stim.mean, df.omit.mean) %>%
   mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
                                 diff = "ORIGINAL – REORDERED"))) %>% 
   mutate(direction = toupper(sub("rd_to_", "", direction)),
-         direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>%
-  # --- convert indices to time
-  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
-  # --- crop time
-  filter(t_train>=0, (t_train-333) < dt)
+         direction = factor(direction, levels = rev(c("RD","MM","MP","OR"))))
 
-toc() # 20 minutes
+toc() # ~3.5 minutes
+
 ```
 
 #### Correlations
@@ -744,304 +742,23 @@ toc() # 20 minutes
 tic()
 df.clusters.corr <- df.corr.subj %>% 
   cluster_loop_cond(n_permutations = 10000)
-toc() # ~ 10 min
+toc() # ~ 1 min
 
 # --- append cluster significance
 df.plot.0.corr <- df.corr.mean %>% 
   left_join(df.clusters.corr) %>%
   mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
                                 diff = "ORIGINAL – REORDERED"))) %>% 
+  # --- convert indices to time
+  mutate(t_test = (dt*(t_test-1)-700)) %>% 
+  mutate(t_train = (dt*(t_train-1))) #%>% 
   #mutate(direction = toupper(sub("rd_to_", "", direction)),
   #       direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>%
-  # --- convert indices to time
-  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
-  # --- crop time
-  filter(t_train>=0, (t_train-333) < dt)
 
 df.plot.0.corr
 
 ```
 
-
-### Plot "Matters Arising"
-
-#### Initialize
-```{r}
-g.base <- list(sound = c(), omission = c())
-g.diff <- list(sound = c(), omission = c())
-
-# Create ad hoc dataframes for onset' labels
-df.labels.onset <- list(
-  sounds = tibble(label = "sound onset",
-                manip = factor(c("REPLICATION\n", "EMPIRICAL NULL\n",
-                                 "REPLICATION – EMPIRICAL NULL\n")),
-                direction = factor("OR", levels = names(stims))),
-  omissions = tibble(label = "omission onset",
-                manip = factor(c("REPLICATION\n", "EMPIRICAL NULL\n",
-                                 "REPLICATION – EMPIRICAL NULL\n")),
-                direction = factor("OR", levels = names(stims)))
-)
-  
-# Function to add onset' labels to a plot
-add_onset <- function(g, df.labels) {
-  g <- g + geom_text(data = df.labels %>% filter(manip %in% unique(g$data$manip)),
-                     aes(label = label, x = 0, y = 350),
-                     hjust = 0, vjust = -0.5, size = 3, fontface = "italic")
-  return(g)
-}
-```
-
-#### Build accuracy plots
-
-```{r}
-
-for (s in c("sounds","omissions")) {
-  # ORIGINAL & REORDERED
-  df.plot.0 %>% 
-    filter(stim == s, manip != "ORIGINAL – REORDERED") %>% 
-    # mutate(manip = paste0("Test data: ", manip)) %>% 
-    mutate(manip = recode_factor(manip, 
-                                 ORIGINAL = "REPLICATION\n", #  (original dataset)\n
-                                 REORDERED = "EMPIRICAL NULL\n")) %>%  # (reordered RD)\n
-    plot_base(col.pal = col.pal.base,
-              z.breaks = acc.breaks.base,
-              z.labels = acc.labels.base) +
-    facet_grid(direction ~ manip) -> g
-  
-  g.base[["acc"]][[s]] <- g %>% add_onset(df.labels.onset[[s]])
-    # scale_x_continuous(breaks = seq(-600,600,100)) +
-    # labs(title = paste0("Trials: ", toupper(s), " / Decoded: PRESENTED stimulus")) -> 
-  
-  # DIFFERENCE
-  g.diff[["acc"]][[s]] <- df.plot.0 %>%
-    filter(stim == s, manip == "ORIGINAL – REORDERED") %>%
-    mutate(manip = recode_factor(manip,
-                                 `ORIGINAL – REORDERED` = "REPLICATION – EMPIRICAL NULL\n")) %>%
-    plot_base(col.pal = col.pal.diff,
-              z.breaks = acc.breaks.diff,
-              z.labels = acc.labels.diff) +
-    facet_grid(direction ~ manip) +
-    # scale_x_continuous(breaks = seq(-600,600,100)) +
-    # labs(title = paste0("Trials: ", toupper(s))) +
-    theme(axis.title.y = element_blank()) -> g
-  
-  g.diff[["acc"]][[s]] <- g %>% add_onset(df.labels.onset[[s]])
-}
-
-# Assemble Figure 1c
-g.fig1.1.acc <- (
-  g.base[["acc"]][["sounds"]] + 
-    (g.diff[["acc"]][["sounds"]] + plot_layout(tag_level = "new")) +
-    plot_layout(widths = c(2, 1)) &
-    theme(strip.text.x = element_text(face = "bold"))
-)
-
-g.fig1.1.acc
-
-# Assemble Supplementary Figure 1a
-g.supfig1.acc <- (
-  g.base[["acc"]][["omissions"]] + 
-    (g.diff[["acc"]][["omissions"]] + plot_layout(tag_level = "new")) +
-    plot_layout(widths = c(2, 1)) &
-    theme(strip.text.x = element_text(face = "bold"))
-)
-
-g.supfig1.acc
-
-```
-
-#### Build correlations plots
-
-```{r}
-
-for (s in c("sounds", "omissions")) {
-  # ORIGINAL & REORDERED
-  df.plot.0.corr %>% 
-    filter(stim == s, manip != "ORIGINAL – REORDERED") %>% 
-    # mutate(manip = paste0("Test data: ", manip)) %>% 
-    mutate(manip = recode_factor(manip, 
-                                 ORIGINAL = "REPLICATION\n", #  (original dataset)\n
-                                 REORDERED = "EMPIRICAL NULL\n")) %>%  # (reordered RD)\n
-    mutate(direction = "") %>% 
-    plot_base(col.pal = col.pal.corr,
-              z = "r",
-              z.breaks = corr.breaks,
-              z.labels = corr.labels) +
-    # scale_x_continuous(breaks = seq(-600,600,100)) +
-    labs(fill = "Correlation") +
-    facet_grid(direction ~ manip) -> g
-  
-  g.base[["corr"]][[s]] <- g %>% add_onset(df.labels.onset[[s]] %>% mutate(direction = ""))
-  
-  # DIFFERENCE
-  df.plot.0.corr %>%
-    filter(stim == s, manip == "ORIGINAL – REORDERED") %>% 
-    mutate(manip = recode_factor(manip,
-                                 `ORIGINAL – REORDERED` = "REPLICATION – EMPIRICAL NULL\n")) %>% 
-    mutate(direction = "") %>% 
-    plot_base(col.pal = col.pal.corr,
-              z = "r",
-              z.breaks = corr.breaks,
-              z.labels = corr.labels) +
-    facet_grid(. ~ manip) +
-    # scale_x_continuous(breaks = seq(-600,600,100)) +
-    labs(fill = "Correlation") +
-    # labs(title = paste0("Trials: ", toupper(s))) +
-    theme(axis.title.y = element_blank()) -> g
-  
-  g.diff[["corr"]][[s]] <- g %>% add_onset(df.labels.onset[[s]] %>% mutate(direction = ""))
-}
-
-# Assemble Figure 1d
-g.fig1.1.corr <- (
-  g.base[["corr"]][["sounds"]] + 
-    (g.diff[["corr"]][["sounds"]] + plot_layout(tag_level = "new")) + 
-    plot_layout(widths = c(2, 1)) &
-    theme(strip.text = element_blank())
-)
-
-g.fig1.1.corr
-
-# Assemble Supplementary Figure 1a
-g.supfig1.corr <- (
-  g.base[["corr"]][["omissions"]] + 
-    (g.diff[["corr"]][["omissions"]] + plot_layout(tag_level = "new")) +
-    plot_layout(widths = c(2, 1)) &
-    theme(strip.text.x = element_text(face = "bold"))
-)
-
-g.supfig1.corr
-```
-
-#### Combine into figure 1
-
-```{r, fig.width = 7, fig.height = 11.5}
-
-((g.transitions + theme(panel.spacing.x = unit(5,"mm"))) + free(g.reordering) + plot_layout(widths = c(1.5, 1))) / 
-  ((g.fig1.1.acc / g.fig1.1.corr & theme(axis.text.x = element_text(angle = 45, hjust = 1))) + 
-     plot_layout(heights = c(4, 1))) / 
-  ((g.fig1.2.acc / g.fig1.2.corr & theme(axis.text.x = element_text(angle = 45, hjust = 1))) + 
-     plot_layout(heights = c(4, 1))) +
-  plot_layout(heights = c(1, 4, 4)) +
-  plot_annotation(tag_levels = "a") -> g
-
-g
-
-if (save) {
-  g %>% ggsave(filename = "./figures/fig1_MattersArising2.png", width = 7, height = 11.5, dpi = 300, device = ragg::agg_png)
-}
-```
-
-
-#### Combine into supp figure 1 (omissions)
-
-```{r, fig.width = 7, fig.height = 5.5}
-
-((g.supfig1.acc / g.supfig1.corr & theme(axis.text.x = element_text(angle = 45, hjust = 1))) + 
-   plot_layout(heights = c(4, 1))) +
-  plot_annotation(tag_levels = "a") -> g
-
-g
-
-if (save) {
-  g %>% ggsave(filename = "./figures/supfig1_MattersArising.png", width = 7, height = 5.5, dpi = 300, device = ragg::agg_png)
-}
-```
-
-
-### \[Sandbox analyses\]
-
-```{r}
-
-## Explore diagonal elements of the time-generalization matrix, subject-wise
-
-df.tmp <- df.stim.subj %>% 
-  calculate_diff(f.map = map2, values_to = "array") %>% 
-  filter(manip == "diff")
-df.plot.0.diag <- tibble()
-for (k in 1:nrow(df.tmp)) {
-  d <- df.tmp$direction[k]
-  for (i in 1:n.subj) {
-    df.plot.0.diag %<>% bind_rows(
-      df.tmp[[k,"array"]][[1]][,,i] %>% 
-        matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
-        filter(t_train == t_test) %>% 
-        mutate(direction = d, id = list.subj[[i]])
-    )
-  }
-}
-
-
-df.plot <- df.plot.0.diag %>% 
-  filter(t_train >= 70, t_train <= 103) %>% 
-  mutate(t_train = dt*(t_train-70))
-  
-df.plot %>% 
-  ggplot(aes(x = t_train, y = accuracy, color = direction)) +
-  facet_wrap(~ id, ncol = 6) +
-  geom_line() 
-
-```
-
-```{r}
-
-## Non-linear modeling of diagonal elements of the time-generalized matrix
-
-df.model <- df.plot %>%
-  mutate(across(c(id,direction), as.factor)) %>% 
-  mutate(start.event = (t_train == 0)) %>% 
-  mutate(direction = ordered(relevel(direction, ref="rd_to_rd")))
-
-contrasts(df.model$direction) <- "contr.treatment"
-
-library(mgcv)
-library(gratia)
-library(itsadug)
-m.fx_1 <- gam(accuracy ~ s(t_train),
-              data = df.model)
-summary(m.fx_1)
-plot(m.fx_1)
-
-m.fx_dir <- gam(accuracy ~ direction + s(t_train, by=direction),
-                data = df.model)
-summary(m.fx_dir)
-gratia::draw(m.fx_dir, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
-
-m.fx_1.rd_1 <- gam(accuracy ~ s(t_train) + s(id, bs="re"),
-                   data = df.model)
-summary(m.fx_1.rd_1)
-gratia::draw(m.fx_1.rd_1, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
-
-m.fx_dir.rd_1 <- gam(accuracy ~ direction + s(t_train, by=direction) + s(id, bs="re"),
-                     data = df.model)
-summary(m.fx_dir.rd_1)
-gratia::draw(m.fx_dir.rd_1, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
-
-m.fx_1.rd_t <- gam(accuracy ~ s(t_train) + s(t_train, id, bs="fs", m=1),
-          data = df.model)
-summary(m.fx_1.rd_t)
-gratia::draw(m.fx_1.rd_t, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
-
-m.fx_dir.rd_t <- gam(accuracy ~ direction + s(t_train, by=direction) + s(t_train, id, bs="fs", m=1),
-          data = df.model) #, method = "ML"
-summary(m.fx_dir.rd_t)
-gratia::draw(m.fx_dir.rd_t, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
-plot(m.fx_dir.rd_t)
-
-m.fx_dir.rd_t.ar.6 <- gam(accuracy ~ direction + s(t_train, by=direction) + s(t_train, id, bs="fs", m=1),
-          data = df.model, AR.start = df.model$start.event, rho=0.6)#, method = "ML"
-summary(m.fx_dir.rd_t.ar.6)
-gratia::draw(m.fx_dir.rd_t.ar.6, parametric = TRUE, grouped_by = T, rug = F, ncol = 3, scales = "fixed")
-
-acf_plot(resid(m.fx_1))
-acf_plot(resid(m.fx_dir))
-acf_plot(resid(m.fx_1.rd_1))
-acf_plot(resid(m.fx_dir.rd_1))
-acf_plot(resid(m.fx_1.rd_t))
-acf_plot(resid(m.fx_dir.rd_t))
-acf_plot(resid(m.fx_dir.rd_t.ar.6))
-
-```
 
 # THEORETICAL NULL
 
@@ -1051,6 +768,7 @@ acf_plot(resid(m.fx_dir.rd_t.ar.6))
 #| cache: true
 
 tic()
+
 null_accuracy <- function(mat.confusion, mat.transition) {
   # Calculate accuracy under the null hypothesis from the transition and confusion matrices mat.T and mat.C
   # The 3/4 factor is used to compensate the unbiased estimator used in cov() by default (see ?cov)
@@ -1096,7 +814,7 @@ for (entropy in c("RD","MM","MP","OR")) {
     i <- i+1
   }
   
-  # Append to other entropies in dataframe
+  # Append to other entropy levels in dataframe
   # --- subject-level data
   df.maths.subj %<>% bind_rows(tibble(array = list(array.scores), entropy = entropy))
   # --- group-averaged data
@@ -1110,7 +828,7 @@ for (entropy in c("RD","MM","MP","OR")) {
 toc() # ~ 1min
 ```
 
-### [Deprecated: Calculate group-level theoretical accuracy]
+### \[Deprecated: Calculate group-level theoretical accuracy\]
 
 ```{r}
 
@@ -1144,7 +862,6 @@ for (entropy in c("RD","MM","MP","OR")) {
 
 toc() # ~ 1s
 ```
-
 
 ### Correlations with entropy
 
@@ -1193,7 +910,6 @@ for (mm in c("original","maths","diff")) {
 
 toc() # ~ 20s
 ```
-
 
 ### Clusters stats
 
@@ -1266,44 +982,156 @@ df.plot.maths.corr
 ```
 
 
+# FIGURES
 
-### [Deprecated: Calculate diff with reordered]
+## Figure 1 & Supplementary Figure 1
+
+### Initialize
+
+```{r}
+g.base <- list(sound = c(), omission = c())
+g.diff <- list(sound = c(), omission = c())
+
+# Create ad hoc dataframes for onset' labels
+df.labels.onset <- list(
+  sounds = tibble(label = "0 = sound onset",
+                manip = factor(c("REPLICATION\n", "EMPIRICAL NULL\n",
+                                 "REPLICATION – EMPIRICAL NULL\n")),
+                direction = factor("OR", levels = names(stims))),
+  omissions = tibble(label = "0 = omission onset",
+                manip = factor(c("REPLICATION\n", "EMPIRICAL NULL\n",
+                                 "REPLICATION – EMPIRICAL NULL\n")),
+                direction = factor("OR", levels = names(stims)))
+)
+  
+# Function to add onset' labels to a plot
+add_onset <- function(g, df.labels) {
+  g <- g + geom_text(data = df.labels %>% filter(manip %in% unique(g$data$manip)),
+                     aes(label = label, x = 0, y = 350),
+                     hjust = 0, vjust = -0.5, size = 3, fontface = "italic")
+  return(g)
+}
+```
+
+### Original & empirical null: accuracy plots
 
 ```{r}
 
-## Clean & prepare
-df.plot.maths <- df.maths.all %>% 
-  mutate(across(starts_with("t_"), ~dt*(.-1))) %>% 
-  filter(t_test!=0) %>% mutate(t_test = t_test + 330*as.numeric(str_remove(stimulus,"S"))) %>%
-  mutate(entropy = factor(entropy, levels = rev(names(mat.T))),
-         stimulus = factor(stimulus, levels = c("S-2", "S-1", "S+1")))
+for (s in c("sounds","omissions")) {
+  # ORIGINAL & REORDERED
+  df.plot.0 %>% 
+    filter(stim == s, manip != "ORIGINAL – REORDERED") %>% 
+    # mutate(manip = paste0("Test data: ", manip)) %>% 
+    mutate(manip = recode_factor(manip, 
+                                 ORIGINAL = "REPLICATION\n", #  (original dataset)\n
+                                 REORDERED = "EMPIRICAL NULL\n")) %>%  # (reordered RD)\n
+    plot_base(col.pal = col.pal.base,
+              z.breaks = acc.breaks.base,
+              z.labels = acc.labels.base) +
+    facet_grid(direction ~ manip) -> g
   
-## Append re-ordered data
-df.plot.maths %<>% 
-  mutate(manip = "THEORETICAL") %>% 
-  bind_rows(df.plot.0 %>%
-              rename(entropy = direction) %>%
-              filter(manip == "REORDERED", stim == "sounds", entropy != "RD", t_train < 333,
-                     (t_test > -666 & t_test<0) | (t_test > 333 & t_test < 666))
-  ) %>% 
-  select(starts_with("t_"), entropy, manip, accuracy)
+  g.base[["acc"]][[s]] <- g %>% add_onset(df.labels.onset[[s]])
+  
+  # DIFFERENCE
+  g.diff[["acc"]][[s]] <- df.plot.0 %>%
+    filter(stim == s, manip == "ORIGINAL – REORDERED") %>%
+    mutate(manip = recode_factor(manip,
+                                 `ORIGINAL – REORDERED` = "REPLICATION – EMPIRICAL NULL\n")) %>%
+    plot_base(col.pal = col.pal.diff,
+              z.breaks = acc.breaks.diff,
+              z.labels = acc.labels.diff) +
+    facet_grid(direction ~ manip) +
+    theme(axis.title.y = element_blank()) -> g
+  
+  g.diff[["acc"]][[s]] <- g %>% add_onset(df.labels.onset[[s]])
+}
 
-## Calculate difference
-df.plot.maths %<>%
-    # mutate(manip = case_match(manip, "" ~ "original", "_reord" ~ "reordered")) %>%
-    pivot_wider(names_from = manip, values_from = "accuracy") %>%
-    mutate(diff = THEORETICAL - REORDERED) %>%
-    pivot_longer(cols = c(THEORETICAL, REORDERED, diff), names_to = "manip", values_to = "accuracy")
+# Assemble Figure 1c
+g.fig1.1.acc <- (
+  g.base[["acc"]][["sounds"]] + 
+    (g.diff[["acc"]][["sounds"]] + plot_layout(tag_level = "new")) +
+    plot_layout(widths = c(2, 1)) &
+    theme(strip.text.x = element_text(face = "bold"))
+)
 
-## Cluster analysis of difference
+g.fig1.1.acc
+
+# Assemble Supplementary Figure 1a
+g.supfig1.acc <- (
+  g.base[["acc"]][["omissions"]] + 
+    (g.diff[["acc"]][["omissions"]] + plot_layout(tag_level = "new")) +
+    plot_layout(widths = c(2, 1)) &
+    theme(strip.text.x = element_text(face = "bold"))
+)
+
+g.supfig1.acc
 
 ```
 
+### Original & empirical null: correlations plots
 
+```{r}
 
-### Plot "Matters Arising"
+for (s in c("sounds", "omissions")) {
+  # ORIGINAL & REORDERED
+  df.plot.0.corr %>% 
+    filter(stim == s, manip != "ORIGINAL – REORDERED") %>% 
+    # mutate(manip = paste0("Test data: ", manip)) %>% 
+    mutate(manip = recode_factor(manip, 
+                                 ORIGINAL = "REPLICATION\n", #  (original dataset)\n
+                                 REORDERED = "EMPIRICAL NULL\n")) %>%  # (reordered RD)\n
+    mutate(direction = "") %>% 
+    plot_base(col.pal = col.pal.corr,
+              z = "r",
+              z.breaks = corr.breaks,
+              z.labels = corr.labels) +
+    # scale_x_continuous(breaks = seq(-600,600,100)) +
+    labs(fill = "Correlation") +
+    facet_grid(direction ~ manip) -> g
+  
+  g.base[["corr"]][[s]] <- g %>% add_onset(df.labels.onset[[s]] %>% mutate(direction = ""))
+  
+  # DIFFERENCE
+  df.plot.0.corr %>%
+    filter(stim == s, manip == "ORIGINAL – REORDERED") %>% 
+    mutate(manip = recode_factor(manip,
+                                 `ORIGINAL – REORDERED` = "REPLICATION – EMPIRICAL NULL\n")) %>% 
+    mutate(direction = "") %>% 
+    plot_base(col.pal = col.pal.corr,
+              z = "r",
+              z.breaks = corr.breaks,
+              z.labels = corr.labels) +
+    facet_grid(. ~ manip) +
+    # scale_x_continuous(breaks = seq(-600,600,100)) +
+    labs(fill = "Correlation") +
+    # labs(title = paste0("Trials: ", toupper(s))) +
+    theme(axis.title.y = element_blank()) -> g
+  
+  g.diff[["corr"]][[s]] <- g %>% add_onset(df.labels.onset[[s]] %>% mutate(direction = ""))
+}
 
-#### Build accuracy plots
+# Assemble Figure 1d
+g.fig1.1.corr <- (
+  g.base[["corr"]][["sounds"]] + 
+    (g.diff[["corr"]][["sounds"]] + plot_layout(tag_level = "new")) + 
+    plot_layout(widths = c(2, 1)) &
+    theme(strip.text = element_blank())
+)
+
+g.fig1.1.corr
+
+# Assemble Supplementary Figure 1a
+g.supfig1.corr <- (
+  g.base[["corr"]][["omissions"]] + 
+    (g.diff[["corr"]][["omissions"]] + plot_layout(tag_level = "new")) +
+    plot_layout(widths = c(2, 1)) &
+    theme(strip.text.x = element_text(face = "bold"))
+)
+
+g.supfig1.corr
+```
+
+### Theoretical null: accuracy plots
 
 ```{r}
 ## Aggregate all data and clean
@@ -1337,7 +1165,6 @@ df.plot.maths <- bind_rows(
                                 diff = "REPLICATION – THEORETICAL NULL\n")),
          direction = factor(entropy, levels = rev(c("RD","MM","MP","OR"))))
 ```
-
 
 ```{r}
 ## PLOT
@@ -1383,7 +1210,7 @@ g.fig1.2.acc <- (
 g.fig1.2.acc
 ```
 
-#### Build correlations plots
+### Theoretical null: correlations plots
 
 ```{r}
 df.plot <- df.plot.maths.corr %>% 
@@ -1436,6 +1263,42 @@ g.fig1.2.corr <- (
 g.fig1.2.corr
 ```
 
+### Assemble Figure 1
+
+```{r, fig.width = 7, fig.height = 11.5}
+
+((g.transitions + theme(panel.spacing.x = unit(5,"mm"))) + free(g.reordering) + plot_layout(widths = c(1.5, 1))) / 
+  ((g.fig1.1.acc / g.fig1.1.corr & theme(axis.text.x = element_text(angle = 45, hjust = 1))) + 
+     plot_layout(heights = c(4, 1))) / 
+  ((g.fig1.2.acc / g.fig1.2.corr & theme(axis.text.x = element_text(angle = 45, hjust = 1))) + 
+     plot_layout(heights = c(4, 1))) +
+  plot_layout(heights = c(1, 4, 4)) +
+  plot_annotation(tag_levels = "a") -> g
+
+g
+
+if (save) {
+  g %>% ggsave(filename = "./figures/fig1_MattersArising2.png", width = 7, height = 11.5, dpi = 300, device = ragg::agg_png)
+}
+```
+
+### Assemble Supplementary Figure 1 (omissions)
+
+```{r, fig.width = 7, fig.height = 5.5}
+
+((g.supfig1.acc / g.supfig1.corr & theme(axis.text.x = element_text(angle = 45, hjust = 1))) + 
+   plot_layout(heights = c(4, 1))) +
+  plot_annotation(tag_levels = "a") -> g
+
+g
+
+if (save) {
+  g %>% ggsave(filename = "./figures/supfig1_MattersArising.png", width = 7, height = 5.5, dpi = 300, device = ragg::agg_png)
+}
+```
+
+
+
 # PREDICTING MOST LIKELY
 
 ### Load data
@@ -1466,6 +1329,7 @@ toc() # ~ 30s
 ```
 
 ### Correlations with entropy
+
 ```{r}
 tic()
 
@@ -1531,7 +1395,6 @@ for (mm in c("original","reordered","diff")) {
 
 toc() # ~ 1min
 ```
-
 
 ### Cluster stats
 
@@ -1610,15 +1473,12 @@ df.plot.ml.corr
 
 ```
 
-
-
 ### Plot "Matters Arising"
 
 ```{r}
 g.base.ml <- list()
 g.diff.ml <- list()
 ```
-
 
 #### Build accuracy plots
 
@@ -1724,12 +1584,12 @@ if (save) {
 }
 ```
 
-
 # Supplementary figures
 
 ## Confusion matrices
 
 ### Single subject, single time point
+
 ```{r, fig.width = 6, fig.height = 2.3}
 
 mat.C.all <- array(dim = c(34,34,4,4,n.subj))
