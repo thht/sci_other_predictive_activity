@@ -1087,7 +1087,7 @@ df.plot %>%
   geom_segment(data = df.plot %>% filter(status == "mostlikely", idx != n.samples),
                aes(x = idx, xend = idx+1, y = class, yend = class.pred, linetype = as.factor(sign(class.pred-class))),
                #arrow = arrow(type = "closed", length = unit(6,"pt")),
-               color = "grey30", show.legend = F) +
+               color = "grey50", show.legend = F) +
   
   geom_point(aes(fill = class), size = 3, shape = 21, color = "white", show.legend = T) +
   
@@ -1095,9 +1095,8 @@ df.plot %>%
              aes(x = idx+1, y = class.pred, color = class.pred),
              size = 2.5, shape = 8) +
   
-  scale_x_continuous(name = "sequence index", breaks = 1:n.samples) +
+  scale_x_continuous(name = "trial number", breaks = 1:n.samples) +
   scale_y_continuous(name = "") +
-  # scale_color_identity(guide = "legend", name = "", labels = "most likely") +
   scale_color_viridis_c(end = 0.8, guide = "legend", name = "", labels = c("","","","most likely")) +
   scale_fill_viridis_c(end = 0.8, guide = "legend", name = "", labels = c("","","","actually presented")) +
   
@@ -1119,7 +1118,7 @@ df.plot %>%
         legend.box = "vertical",
         legend.box.just = "left",
         legend.margin = margin(b = -10),
-        legend.text = element_text(margin = margin(r = -12, l=-3,  unit = "pt"))
+        legend.text = element_text(margin = margin(r = -12, l=0,  unit = "pt"))
         ) -> g.mostlikely
 
 g.mostlikely
@@ -1406,7 +1405,7 @@ g.fig1.2.corr
 g
 
 if (save) {
-  g %>% ggsave(filename = "./figures/fig1_MattersArising2.png", width = 7, height = 11.5, dpi = 300, device = ragg::agg_png)
+  g %>% ggsave(filename = "./figures/fig1_MattersArising.png", width = 7, height = 11.5, dpi = 300, device = ragg::agg_png)
 }
 ```
 
@@ -1523,13 +1522,14 @@ g.fig2.corr
 ### Assemble figure 2
 
 ```{r, fig.width = 8, fig.height = 5.5}
-(g.mostlikely + coord_fixed(0.5)) +
+(g.mostlikely + coord_fixed(0.5))+
   plot_spacer() +
   ((g.fig2.acc / (g.fig2.corr + plot_layout(tag_level = 'new'))) + 
      plot_layout(heights = c(3, 1)) & 
      theme(plot.title = element_text(vjust = -8),
            legend.box.margin = margin(l=-5),
            strip.clip = "off",
+           strip.text = element_text(size = 8),
            axis.text.x = element_text(angle = 45, hjust = 1))
   ) + 
   plot_layout(widths = c(1, 0.1, 2)) +
@@ -1539,9 +1539,9 @@ g.fig2.corr
 
 g
 
-(g.mostlikely + g.fig2.acc + plot_layout(widths = c(1, 3))) /
-  (plot_spacer() + g.fig2.corr + plot_layout(widths = c(1, 3))) +
-  plot_layout(heights = c(3, 1)) -> g
+# (g.mostlikely + g.fig2.acc + plot_layout(widths = c(1, 3))) /
+#   (plot_spacer() + g.fig2.corr + plot_layout(widths = c(1, 3))) +
+#   plot_layout(heights = c(3, 1)) -> g
 
 if (save) {
   g %>% ggsave(filename = "./figures/fig2_MattersArising.png", width = 8, height = 5.5, dpi = 300, device = ragg::agg_png)
