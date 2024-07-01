@@ -567,9 +567,9 @@ g.mostlikely
 
 # REPLICATION & REORDERING (empirical null)
 
-### Load
+### Load data
 
-#### Stimulus data
+#### Sounds
 
 ```{r}
 #| cache: true
@@ -600,7 +600,7 @@ df.stim.subj %<>% mutate(stim = "sounds") %>%
 toc() # ~40s
 ```
 
-#### Omission data
+#### Omissions
 
 ```{r}
 #| cache: true
@@ -828,39 +828,38 @@ for (entropy in c("RD","MM","MP","OR")) {
 toc() # ~ 1min
 ```
 
-### \[Deprecated: Calculate group-level theoretical accuracy\]
+### Append original data & calculate diff
 
 ```{r}
+df.maths.all <- 
+# --- aggregate original, theoretical and difference between the 2
+  bind_rows(df.stim.subj %>%
+              # --- select original analysis
+              filter(manip == "") %>% mutate(manip = "original") %>% 
+              # --- crop to the same time-window than for theoretical analysis
+              mutate(array = map(array, .f=\(x){x[,3:138,]})) %>% 
+              # mutate(array = list(array[[1]][71:104,3:138,])) %>% 
+              mutate(entropy = toupper(str_replace(direction,"rd_to_",""))),
+            df.maths.subj %>%
+              mutate(manip = "maths") %>% 
+              mutate(array = map(array, .f=\(x){x-0.25}))) %>% 
+  select(manip, entropy, array) %>% 
+  pivot_wider(names_from = manip, values_from = "array") %>% 
+  mutate(diff = map2(original, maths, .f=\(x,y){x-y})) %>% 
+  pivot_longer(cols = c(original, maths, diff), names_to = "manip", values_to = "array")
 
-tic()
-
-# Average across participants
-mat.C.mean <- tmp.all %>% apply(c(1,2,3,4), mean)
-
-df.maths.acc <- tibble()
-for (entropy in c("RD","MM","MP","OR")) {
-  df.maths.acc %<>%
-    # Theoretical results for stimulus "S minus 2"
-    bind_rows(mat.C.mean %>%
-                apply(c(1,2), null_accuracy, mat.transition = mat.T[[entropy]]%^%2) %>%
-                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
-                mutate(entropy = entropy, stimulus = "S-2")
-              ) %>% 
-    # Theoretical results for stimulus "S minus 1"
-    bind_rows(mat.C.mean %>%
-                apply(c(1,2), null_accuracy, mat.transition = mat.T[[entropy]]%^%1) %>%
-                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
-                mutate(entropy = entropy, stimulus = "S-1")
-              ) %>% 
-    # Theoretical results for stimulus "S+1"
-    bind_rows(mat.C.mean %>%
-                apply(c(1,2), null_accuracy, mat.transition = t(mat.T[[entropy]])) %>%
-                matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "accuracy") %>% 
-                mutate(entropy = entropy, stimulus = "S+1")
-              )
-}
-
-toc() # ~ 1s
+# bind_rows(
+#   df.maths.subj %>% mutate(manip = "maths") %>% a,
+#   df.stim.subj %>%
+#     filter(manip == "") %>% mutate(manip = "original") %>% 
+#     mutate(entropy = toupper(str_remove(direction, "rd_to_")),
+#            entropy = factor(entropy, levels = c("RD","MM","MP","OR")))
+# ) %>% 
+#   select(-direction, -stim) %>% 
+#   pivot_wider(names_from = manip, values_from = "array") %>% 
+#   mutate(diff = map2(original, maths, .f=\(x,y){x-y})) %>% 
+#   pivot_longer(cols = c(original, maths, diff), names_to = "manip", values_to = "array")
+  
 ```
 
 ### Correlations with entropy
@@ -881,7 +880,7 @@ for (mm in c("original","maths","diff")) {
                                       idx.lines = 1:4, idx.subj)
     
     # --- calculate correlation with entropy level coded as 0,1,2,3, obtaining a 2D array
-    arr.corr.tmp <- apply(arr.tmp, 1:2, correlations_vecs, vec = 0:3)
+    arr.corr.tmp <- apply(arr.tmp, 1:2, correlations_vecs, vec2 = 0:3)
     
     # --- append to already processed subjects in a 3D array
     if (idx.subj == 1) {
@@ -894,7 +893,7 @@ for (mm in c("original","maths","diff")) {
   # Replace NAs by 0 and extreme values by +/- .99
   arr.corr <- correlations_fixval(arr.corr)
   
-  # --- store participant-level results in a dataframe
+  # --- store participant-level results in a dataframe of arrays
   df.corr.maths.subj %<>% bind_rows(tibble(manip = mm, array = list(arr.corr)))
   
   # --- calculate group average and store in a dataframe
@@ -919,25 +918,12 @@ toc() # ~ 20s
 #| cache: true
 
 tic()
-df.clusters.maths <-
-  # --- aggregate original, theoretical and difference between the 2
-  bind_rows(df.stim.subj %>%
-              # --- select original analysis
-              filter(manip == "") %>% mutate(manip = "original") %>% 
-              # --- crop to the same time-window than for theoretical analysis
-              mutate(array = map(array, .f=\(x){x[71:104,3:138,]})) %>% 
-              # mutate(array = list(array[[1]][71:104,3:138,])) %>% 
-              mutate(entropy = toupper(str_replace(direction,"rd_to_",""))),
-            df.maths %>%
-              mutate(manip = "maths") %>% 
-              mutate(array = map(array, .f=\(x){x-0.25}))) %>% 
-  select(manip, entropy, array) %>% 
-  pivot_wider(names_from = manip, values_from = "array") %>% 
-  mutate(diff = map2(original, maths, .f=\(x,y){x-y})) %>% 
-  pivot_longer(cols = c(original, maths, diff), names_to = "manip", values_to = "array") %>% 
-  # --- cluster
-  cluster_loop_cond(n_permutations = 10000)
-toc() # ~ 2min
+df.clusters.maths <- df.maths.all %>% 
+  cluster_loop_cond(n_permutations = 10000)%>%
+  # --- convert indices to time
+  mutate(t_train = dt*(t_train-1) - 0,
+         t_test = dt*(t_test-1) - 680)
+toc() # ~ 1.5 min
 
 # Check with a quick plot
 df.clusters.maths %>% 
@@ -955,7 +941,7 @@ ggplot(aes(x = t_test, y = t_train, fill = signif)) +
 tic()
 df.clusters.corr.maths <- df.corr.maths.subj %>% 
   cluster_loop_cond(n_permutations = 10000)
-toc() # ~ 10s
+toc() # ~ 20s
 
 # Check with a quick plot
 df.clusters.corr.maths %>% 
@@ -973,11 +959,185 @@ df.plot.maths.corr <- df.corr.maths.mean %>%
   #       direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>%
   # --- convert indices to time
   mutate(t_train = dt*(t_train-1) - 0,
-         t_test = dt*(t_test-1) - 680) %>% 
+         t_test = dt*(t_test-1) - 680) #%>% 
     # --- crop time
-  filter(t_train>=0, (t_train-333) < dt)
+  # filter(t_train>=0, (t_train-333) < dt)
 
 df.plot.maths.corr
+
+```
+
+
+# PREDICTING MOST LIKELY
+
+### Load data
+
+```{r}
+#| cache: true
+tic()
+
+# Load subject-level data and derive grand average
+df.stim.ml.mean <- tibble()
+df.stim.ml.subj <- tibble()
+for (manip in c("","_reord")) { 
+  
+  for (direction in c("rd_to_mm", "rd_to_mp", "rd_to_or")) {
+    
+    tmp <- load_loop_subj(folder = "reorder_random",
+                          condition = paste0(direction, "_sp", manip))
+    
+    df.stim.ml.mean %<>% bind_rows(tmp[[2]] %>% mutate(manip = manip, direction = direction))
+    df.stim.ml.subj %<>% bind_rows(tibble(manip = manip, direction = direction, array = list(tmp[[1]])))
+  }
+}
+
+df.stim.ml.mean %<>% mutate(stim = "sounds")
+df.stim.ml.subj %<>% mutate(stim = "sounds") %>%
+  # --- center decoding accuracy on 0
+  mutate(array = map(array, .f=\(x){x-0.25})) %>% 
+  # --- crop subject-level data for cluster analysis
+  mutate(array = map(array, .f=\(x){x[71:104,,]}))
+
+toc() # ~ 30s
+```
+
+### Correlations with entropy
+
+```{r}
+tic()
+
+## Prepare input data
+df.tmp <- df.stim.ml.subj %>% 
+  calculate_diff(f.map = map2, values_to = "array") %>%
+  mutate(entropy = str_remove(direction, "rd_to_"),
+         entropy = factor(entropy, levels = c("rd","mm","mp","or"))) %>% 
+  select(-direction) %>% 
+  arrange(as.numeric(entropy))
+df.tmp
+
+
+## Calculate correlations
+df.corr.ml.mean <- tibble()
+df.corr.ml.subj <- tibble() 
+# --- Loop through condition "manip" and stimulus type "stim"
+for (mm in c("original","reordered","diff")) { 
+  print(mm)
+  for (ss in c("sounds")) {
+    print(ss)
+    
+    # --- Loop through subjects to derive a 3D array of participant-level time-generalized correlations with entropy, from a 3D array of participant-level accuracy matrix
+    for (idx.subj in 1:n.subj) {
+      
+      # --- bind time-generalization matrices for the 3 non-random conditions into a single 3D array
+      arr.tmp <- correlations_extract3D(data = filter(df.tmp, manip == mm, stim == ss),
+                                        idx.lines = 1:3, idx.subj)
+      
+      # --- calculate correlation with entropy level coded as 0,1,2, obtaining a 2D array
+      arr.corr.tmp <- apply(arr.tmp, 1:2, correlations_vecs, vec2 = 0:2)
+      
+      # --- append to already processed subjects in a 3D array
+      if (idx.subj == 1) {
+        arr.corr <- arr.corr.tmp
+      } else {
+        arr.corr %<>% abind(arr.corr.tmp, along = 3)
+      }
+    }
+    
+    # Replace NAs by 0 and extreme values by +/- .99
+    arr.corr <- correlations_fixval(arr.corr)
+    
+    # --- store participant-level results in a dataframe
+    df.corr.ml.subj %<>% bind_rows(tibble(manip = mm, stim = ss, array = list(arr.corr)))
+    
+    # --- calculate groupe average and store in a dataframe
+    df.corr.ml.mean %<>% bind_rows(
+      arr.corr %>% 
+        atanh %>%  # apply Fisher's transformation
+        apply(c(1,2), mean) %>% # average across participants
+        tanh %>% # convert back to correlation coefficients  
+        matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "r") %>% 
+        mutate(manip = mm, stim = ss)
+    )
+  }
+}
+
+toc() # ~ 1min
+```
+
+### Cluster stats
+
+#### Accuracy
+
+```{r}
+#| cache: true
+tic()
+
+## Cluster analysis with subject-level data
+# --- calculate original-reordered difference
+tmp.diff <- df.stim.ml.subj %>% 
+  calculate_diff(f.map = map2, values_to = "array")
+# --- calculate average of differences
+tmp.ave <- tmp.diff %>% 
+  filter(manip == "diff") %>% 
+  pivot_wider(names_from = direction, values_from = array) %>% 
+  group_by(stim, manip) %>% 
+  summarise(array = pmap(., .f=function(rd_to_mm, rd_to_mp, rd_to_or, ...) {(rd_to_mm+rd_to_mp+rd_to_or)/3})) %>% 
+  mutate(direction = "average of\n(MM,MP,OR)")
+# --- combine & run cluster analysis
+df.clusters.ml <- bind_rows(tmp.diff, tmp.ave) %>% 
+  cluster_loop_cond(n_permutations = 5000)
+
+## Grand average data
+# --- calculate original-reordered difference
+tmp.diff <- df.stim.ml.mean %>%
+  calculate_diff(f.map = map2_dbl, values_to = "accuracy")
+# --- calculate average of difference across entropy levels
+tmp.ave <- tmp.diff %>% 
+  filter(manip == "diff") %>% 
+  group_by(t_train, t_test, manip, stim) %>% 
+  summarise(accuracy = mean(accuracy, na.rm=T)) %>% 
+  mutate(direction = "average of\n(MM,MP,OR)")
+# --- combine
+df.plot.ml <- bind_rows(tmp.diff, tmp.ave)
+
+##  Aggregate all data and clean
+df.plot.ml %<>%
+  # --- append cluster significance
+  left_join(df.clusters.ml) %>%
+  mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
+                                diff = "ORIGINAL – REORDERED"))) %>%
+  mutate(direction = toupper(sub("rd_to_", "", direction))) %>% 
+  mutate(direction = factor(direction, levels = rev(c("AVERAGE OF\n(MM,MP,OR)","MM","MP","OR")))) %>%
+  # --- convert indices to time
+  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
+  # --- crop time
+  filter(t_train>=0, (t_train-333) < dt)
+
+toc() # ~3.5min
+```
+
+#### Correlations
+
+```{r}
+
+tic()
+df.clusters.corr.ml <- df.corr.ml.subj %>% 
+  cluster_loop_cond(n_permutations = 5000)
+toc() # ~ 2.5min
+
+# --- append cluster significance
+df.plot.ml.corr <- df.corr.ml.mean %>% 
+  left_join(df.clusters.corr.ml) %>%
+  mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
+                                diff = "ORIGINAL – REORDERED"))) %>% 
+  #mutate(direction = toupper(sub("rd_to_", "", direction)),
+  #       direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>%
+  # --- convert indices to time
+  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
+  # --- crop time
+  filter(t_train>=0, (t_train-333) < dt)
+
+df.plot.ml.corr
 
 ```
 
@@ -1145,7 +1305,7 @@ df.plot.maths <- bind_rows(
     filter(manip == "") %>% 
     mutate(manip = "original") %>% 
     mutate(entropy = toupper(sub("rd_to_", "", direction))) %>% 
-    mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>% 
+    # mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>% 
     select(-stim, -direction)
 ) %>% 
   # --- calculate difference
@@ -1183,8 +1343,8 @@ df.plot.maths %>%
   # scale_x_continuous(breaks = seq(-600,600,100))
   # labs(title = paste0("Trials: ", toupper(s), " / Decoded: PRESENTED stimulus"))
 
-g.maths.base[["acc"]] <- g %>% add_onset(df.labels.onset.stim %>% 
-                                           mutate(manip = str_replace(manip, "EMPIRICAL","THEORETICAL")))
+g.maths.base[["acc"]] <- g %>% add_onset(df.labels.onset[["sounds"]] %>% 
+                                           mutate(manip = str_replace(manip, "EMPIRICAL", "THEORETICAL")))
 
 # --- DIFFERENCE
 df.plot.maths %>%
@@ -1193,12 +1353,10 @@ df.plot.maths %>%
             z.breaks = acc.breaks.diff,
             z.labels = acc.labels.diff) +
   facet_grid(direction ~ manip) +
-  # scale_x_continuous(breaks = seq(-600,600,100)) +
-  # labs(title = paste0("Trials: ", toupper(s))) +
   theme(axis.title.y = element_blank()) -> g
 
-g.maths.diff[["acc"]] <- g %>% add_onset(df.labels.onset.stim %>% 
-                                           mutate(manip = str_replace(manip, "EMPIRICAL","THEORETICAL")))
+g.maths.diff[["acc"]] <- g %>% add_onset(df.labels.onset[["sounds"]] %>% 
+                                           mutate(manip = str_replace(manip, "EMPIRICAL", "THEORETICAL")))
 
 g.fig1.2.acc <- (
   g.maths.base[["acc"]] + 
@@ -1230,9 +1388,9 @@ df.plot %>%
   labs(fill = "Correlation") +
   facet_grid(direction ~ manip) -> g
 
-g.maths.base[["corr"]] <- g %>% add_onset(df.labels.onset.stim %>% 
+g.maths.base[["corr"]] <- g %>% add_onset(df.labels.onset[["sounds"]] %>% 
                                             mutate(direction = "") %>% 
-                                            mutate(manip = str_replace(manip, "EMPIRICAL","THEORETICAL")))
+                                            mutate(manip = str_replace(manip, "EMPIRICAL", "THEORETICAL")))
 
 # DIFFERENCE
 df.plot %>%
@@ -1249,9 +1407,9 @@ df.plot %>%
   theme(axis.title.y = element_blank()) -> g
 
 
-g.maths.diff[["corr"]] <- g %>% add_onset(df.labels.onset.stim %>% 
+g.maths.diff[["corr"]] <- g %>% add_onset(df.labels.onset[["sounds"]] %>% 
                                             mutate(direction = "") %>% 
-                                            mutate(manip = str_replace(manip, "EMPIRICAL","THEORETICAL")))
+                                            mutate(manip = str_replace(manip, "EMPIRICAL", "THEORETICAL")))
 
 g.fig1.2.corr <- (
   g.maths.base[["corr"]] + 
@@ -1299,188 +1457,16 @@ if (save) {
 
 
 
-# PREDICTING MOST LIKELY
-
-### Load data
-
-```{r}
-#| cache: true
-tic()
-
-# Load subject-level data and derive grand average
-df.stim.ml.mean <- tibble()
-df.stim.ml.subj <- tibble()
-for (manip in c("","_reord")) { 
-  
-  for (direction in c("rd_to_mm", "rd_to_mp", "rd_to_or")) {
-    
-    tmp <- load_loop_subj(folder = "reorder_random",
-                          condition = paste0(direction, "_sp", manip))
-    
-    df.stim.ml.mean %<>% bind_rows(tmp[[2]] %>% mutate(manip = manip, direction = direction))
-    df.stim.ml.subj %<>% bind_rows(tibble(manip = manip, direction = direction, array = list(tmp[[1]])))
-  }
-}
-
-df.stim.ml.mean %<>% mutate(stim = "sounds")
-df.stim.ml.subj %<>% mutate(stim = "sounds") %>% mutate(array = map(array, .f=\(x){x-0.25}))
-
-toc() # ~ 30s
-```
-
-### Correlations with entropy
-
-```{r}
-tic()
-
-## Prepare input data
-df.tmp <- df.stim.ml.subj %>% 
-  calculate_diff(f.map = map2, values_to = "array") %>%
-  mutate(entropy = str_remove(direction, "rd_to_"),
-         entropy = factor(entropy, levels = c("rd","mm","mp","or"))) %>% 
-  select(-direction) %>% 
-  arrange(as.numeric(entropy))
-df.tmp
 
 
-## Calculate correlations
-df.corr.ml.mean <- tibble()
-df.corr.ml.subj <- tibble() 
-# --- Loop through condition "manip" and stimulus type "stim"
-for (mm in c("original","reordered","diff")) { 
-  print(mm)
-  for (ss in c("sounds")) {
-    print(ss)
-    
-    # --- Loop through subjects to derive a 3D array of participant-level time-generalized correlations with entropy, from a 3D array of participant-level accuracy matrix
-    for (idx.subj in 1:n.subj) {
-      
-      # --- bind time-generalization matrices for the 3 non-random conditions into a single 3D array
-      arr.tmp <- correlations_extract3D(data = filter(df.tmp, manip == mm, stim == ss),
-                                        idx.lines = 1:3, idx.subj)
-      # arr.tmp <- abind(
-      #   filter(df.tmp, manip == mm, stim == ss)[[1,"array"]][[1]][,,idx.subj],
-      #   filter(df.tmp, manip == mm, stim == ss)[[2,"array"]][[1]][,,idx.subj],
-      #   filter(df.tmp, manip == mm, stim == ss)[[3,"array"]][[1]][,,idx.subj],
-      #   along = 3)
-      
-      # --- calculate correlation with entropy level coded as 0,1,2, obtaining a 2D array
-      arr.corr.tmp <- apply(arr.tmp, 1:2, correlations_vecs, vec = 0:2)
-      
-      # --- append to already processed subjects in a 3D array
-      if (idx.subj == 1) {
-        arr.corr <- arr.corr.tmp
-      } else {
-        arr.corr %<>% abind(arr.corr.tmp, along = 3)
-      }
-    }
-    
-    # Replace NAs by 0 and extreme values by +/- .99
-    arr.corr <- correlations_fixval(arr.corr)
-    
-    # --- store participant-level results in a dataframe
-    df.corr.ml.subj %<>% bind_rows(tibble(manip = mm, stim = ss, array = list(arr.corr)))
-    
-    # --- calculate groupe average and store in a dataframe
-    df.corr.ml.mean %<>% bind_rows(
-      arr.corr %>% 
-        atanh %>%  # apply Fisher's transformation
-        apply(c(1,2), mean) %>% # average across participants
-        tanh %>% # convert back to correlation coefficients  
-        matrix_to_df2(row.name = "t_train", col.name = "t_test", val.name = "r") %>% 
-        mutate(manip = mm, stim = ss)
-    )
-  }
-}
-
-toc() # ~ 1min
-```
-
-### Cluster stats
-
-#### Accuracy
-
-```{r}
-#| cache: true
-tic()
-
-## Cluster analysis with subject-level data
-# --- calculate original-reordered difference
-tmp.diff <- df.stim.ml.subj %>% 
-  calculate_diff(f.map = map2, values_to = "array")
-# --- calculate average of differences
-tmp.ave <- tmp.diff %>% 
-  filter(manip == "diff") %>% 
-  pivot_wider(names_from = direction, values_from = array) %>% 
-  group_by(stim, manip) %>% 
-  summarise(array = pmap(., .f=function(rd_to_mm, rd_to_mp, rd_to_or, ...) {(rd_to_mm+rd_to_mp+rd_to_or)/3})) %>% 
-  mutate(direction = "average of\n(MM,MP,OR)")
-# --- combine & run cluster analysis
-df.clusters.ml <- bind_rows(tmp.diff, tmp.ave) %>% 
-  cluster_loop_cond(n_permutations = 5000)
-
-## Grand average data
-# --- calculate original-reordered difference
-tmp.diff <- df.stim.ml.mean %>%
-  calculate_diff(f.map = map2_dbl, values_to = "accuracy")
-# --- calculate average of difference across entropy levels
-tmp.ave <- tmp.diff %>% 
-  filter(manip == "diff") %>% 
-  group_by(t_train, t_test, manip, stim) %>% 
-  summarise(accuracy = mean(accuracy, na.rm=T)) %>% 
-  mutate(direction = "average of\n(MM,MP,OR)")
-# --- combine
-df.plot.ml <- bind_rows(tmp.diff, tmp.ave)
-
-##  Aggregate all data and clean
-df.plot.ml %<>%
-  # --- append cluster significance
-  left_join(df.clusters.ml) %>%
-  mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
-                                diff = "ORIGINAL – REORDERED"))) %>%
-  mutate(direction = toupper(sub("rd_to_", "", direction))) %>% 
-  mutate(direction = factor(direction, levels = rev(c("AVERAGE OF\n(MM,MP,OR)","MM","MP","OR")))) %>%
-  # --- convert indices to time
-  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
-  # --- crop time
-  filter(t_train>=0, (t_train-333) < dt)
-
-toc() # ~3.5min
-```
-
-#### Correlations
-
-```{r}
-
-tic()
-df.clusters.corr.ml <- df.corr.ml.subj %>% 
-  cluster_loop_cond(n_permutations = 5000)
-toc() # ~ 2.5min
-
-# --- append cluster significance
-df.plot.ml.corr <- df.corr.ml.mean %>% 
-  left_join(df.clusters.corr.ml) %>%
-  mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
-                                diff = "ORIGINAL – REORDERED"))) %>% 
-  #mutate(direction = toupper(sub("rd_to_", "", direction)),
-  #       direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>%
-  # --- convert indices to time
-  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
-  # --- crop time
-  filter(t_train>=0, (t_train-333) < dt)
-
-df.plot.ml.corr
-
-```
-
-### Plot "Matters Arising"
+## Figure 2
 
 ```{r}
 g.base.ml <- list()
 g.diff.ml <- list()
 ```
 
-#### Build accuracy plots
+### Build accuracy plots
 
 ```{r}
 
@@ -1519,7 +1505,7 @@ for (s in c("sounds")) {
 g.fig2.acc
 ```
 
-#### Build correlations plots
+### Build correlations plots
 
 ```{r}
 
@@ -1562,7 +1548,7 @@ for (s in c("sounds")) {
 g.fig2.corr
 ```
 
-#### Combine into figure 2
+### Assemble figure 2
 
 ```{r, fig.width = 8, fig.height = 5.5}
 (g.mostlikely) +
@@ -1584,7 +1570,7 @@ if (save) {
 }
 ```
 
-# Supplementary figures
+# Supplementary Figure 2
 
 ## Confusion matrices
 
