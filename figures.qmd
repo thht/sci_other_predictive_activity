@@ -1548,7 +1548,7 @@ if (save) {
 }
 ```
 
-# Supplementary Figure 2
+## Supplementary Figure 2
 
 ```{r, fig.width = 6, fig.height = 2.3}
 
