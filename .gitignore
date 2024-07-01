@@ -14,5 +14,7 @@ _backup_
 .Rhistory
 .RData
 .Ruserdata
-maths_files/
 data/
+manuscript_files/
+maths_files/
+
