@@ -634,6 +634,7 @@ toc() # ~ 2s
 ### Correlations with entropy
 
 ```{r}
+#| cache: true
 
 ## Prepare input data
 df.tmp <- bind_rows(df.stim.subj, df.omit.subj) %>% 
@@ -700,8 +701,8 @@ for (mm in c("original","reordered","diff")) {
     )
   }
 }
-toc() # ~20 s
 
+toc() # ~20 s
 ```
 
 ### Clusters stats
@@ -738,6 +739,7 @@ toc() # ~3.5 minutes
 #### Correlations
 
 ```{r}
+#| cache: true
 
 tic()
 df.clusters.corr <- df.corr.subj %>% 
@@ -756,7 +758,6 @@ df.plot.0.corr <- df.corr.mean %>%
   #       direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>%
 
 df.plot.0.corr
-
 ```
 
 
@@ -831,6 +832,7 @@ toc() # ~ 1min
 ### Append original data & calculate diff
 
 ```{r}
+
 df.maths.all <- 
 # --- aggregate original, theoretical and difference between the 2
   bind_rows(df.stim.subj %>%
@@ -847,24 +849,13 @@ df.maths.all <-
   pivot_wider(names_from = manip, values_from = "array") %>% 
   mutate(diff = map2(original, maths, .f=\(x,y){x-y})) %>% 
   pivot_longer(cols = c(original, maths, diff), names_to = "manip", values_to = "array")
-
-# bind_rows(
-#   df.maths.subj %>% mutate(manip = "maths") %>% a,
-#   df.stim.subj %>%
-#     filter(manip == "") %>% mutate(manip = "original") %>% 
-#     mutate(entropy = toupper(str_remove(direction, "rd_to_")),
-#            entropy = factor(entropy, levels = c("RD","MM","MP","OR")))
-# ) %>% 
-#   select(-direction, -stim) %>% 
-#   pivot_wider(names_from = manip, values_from = "array") %>% 
-#   mutate(diff = map2(original, maths, .f=\(x,y){x-y})) %>% 
-#   pivot_longer(cols = c(original, maths, diff), names_to = "manip", values_to = "array")
   
 ```
 
 ### Correlations with entropy
 
 ```{r}
+#| cache: true
 
 tic()
 
@@ -937,6 +928,7 @@ ggplot(aes(x = t_test, y = t_train, fill = signif)) +
 #### Correlations
 
 ```{r}
+#| cache: true
 
 tic()
 df.clusters.corr.maths <- df.corr.maths.subj %>% 
@@ -970,7 +962,7 @@ df.plot.maths.corr
 
 # PREDICTING MOST LIKELY
 
-### Load data
+## Load data
 
 ```{r}
 #| cache: true
@@ -1001,9 +993,11 @@ df.stim.ml.subj %<>% mutate(stim = "sounds") %>%
 toc() # ~ 30s
 ```
 
-### Correlations with entropy
+## Correlations with entropy
 
 ```{r}
+#| cache: true
+
 tic()
 
 ## Prepare input data
@@ -1019,6 +1013,7 @@ df.tmp
 ## Calculate correlations
 df.corr.ml.mean <- tibble()
 df.corr.ml.subj <- tibble() 
+
 # --- Loop through condition "manip" and stimulus type "stim"
 for (mm in c("original","reordered","diff")) { 
   print(mm)
@@ -1061,15 +1056,16 @@ for (mm in c("original","reordered","diff")) {
   }
 }
 
-toc() # ~ 1min
+toc() # ~ 15s
 ```
 
-### Cluster stats
+## Cluster stats
 
-#### Accuracy
+### Accuracy
 
 ```{r}
 #| cache: true
+
 tic()
 
 ## Cluster analysis with subject-level data
@@ -1085,7 +1081,10 @@ tmp.ave <- tmp.diff %>%
   mutate(direction = "average of\n(MM,MP,OR)")
 # --- combine & run cluster analysis
 df.clusters.ml <- bind_rows(tmp.diff, tmp.ave) %>% 
-  cluster_loop_cond(n_permutations = 5000)
+  cluster_loop_cond(n_permutations = 10000) %>% 
+  # --- convert indices to time
+  mutate(t_test = (dt*(t_test-1)-700)) %>% 
+  mutate(t_train = (dt*(t_train-1)))
 
 ## Grand average data
 # --- calculate original-reordered difference
@@ -1107,23 +1106,24 @@ df.plot.ml %<>%
   mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
                                 diff = "ORIGINAL – REORDERED"))) %>%
   mutate(direction = toupper(sub("rd_to_", "", direction))) %>% 
-  mutate(direction = factor(direction, levels = rev(c("AVERAGE OF\n(MM,MP,OR)","MM","MP","OR")))) %>%
-  # --- convert indices to time
-  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
-  # --- crop time
-  filter(t_train>=0, (t_train-333) < dt)
+  mutate(direction = factor(direction, levels = rev(c("AVERAGE OF\n(MM,MP,OR)","MM","MP","OR")))) #%>%
+  # # --- convert indices to time
+  # mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
+  # # --- crop time
+  # filter(t_train>=0, (t_train-333) < dt)
 
-toc() # ~3.5min
+toc() # ~1.5min
 ```
 
-#### Correlations
+### Correlations
 
 ```{r}
+#| cache: true
 
 tic()
 df.clusters.corr.ml <- df.corr.ml.subj %>% 
-  cluster_loop_cond(n_permutations = 5000)
-toc() # ~ 2.5min
+  cluster_loop_cond(n_permutations = 10000)
+toc() # ~ 30s
 
 # --- append cluster significance
 df.plot.ml.corr <- df.corr.ml.mean %>% 
@@ -1131,11 +1131,14 @@ df.plot.ml.corr <- df.corr.ml.mean %>%
   mutate(manip = (recode_factor(manip, original = "ORIGINAL", reordered = "REORDERED",
                                 diff = "ORIGINAL – REORDERED"))) %>% 
   #mutate(direction = toupper(sub("rd_to_", "", direction)),
-  #       direction = factor(direction, levels = rev(c("RD","MM","MP","OR")))) %>%
+  #       direction = factor(direction, levels = rev(c("RD","MM","MP","OR"))))  %>% 
   # --- convert indices to time
-  mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
-  # --- crop time
-  filter(t_train>=0, (t_train-333) < dt)
+  mutate(t_test = (dt*(t_test-1)-700)) %>% 
+  mutate(t_train = (dt*(t_train-1)))
+  # # --- convert indices to time
+  # mutate(across(starts_with("t_"), ~(dt*(.-1)-700))) %>%
+  # # --- crop time
+  # filter(t_train>=0, (t_train-333) < dt)
 
 df.plot.ml.corr
 
@@ -1183,8 +1186,8 @@ for (s in c("sounds","omissions")) {
     filter(stim == s, manip != "ORIGINAL – REORDERED") %>% 
     # mutate(manip = paste0("Test data: ", manip)) %>% 
     mutate(manip = recode_factor(manip, 
-                                 ORIGINAL = "REPLICATION\n", #  (original dataset)\n
-                                 REORDERED = "EMPIRICAL NULL\n")) %>%  # (reordered RD)\n
+                                 ORIGINAL = "REPLICATION\n", 
+                                 REORDERED = "EMPIRICAL NULL\n")) %>%
     plot_base(col.pal = col.pal.base,
               z.breaks = acc.breaks.base,
               z.labels = acc.labels.base) +
@@ -1475,13 +1478,16 @@ for (s in c("sounds")) {
   df.plot.ml %>% 
     filter(t_test >=-333, t_test <= 0) %>% 
     filter(stim == s, manip != "ORIGINAL – REORDERED") %>% 
-    mutate(manip = paste0(manip)) %>% #"Test data: ", 
+    mutate(manip = paste0(manip)) %>% 
+    mutate(manip = recode_factor(manip, 
+                                 ORIGINAL = "ORIGINAL", 
+                                 REORDERED = "EMPIRICAL NULL")) %>%
     plot_base(col.pal = col.pal.base,
               z.breaks = acc.breaks.base,
               z.labels = acc.labels.base,
               legend.position = "right") +
     facet_grid(direction ~ manip) +
-    labs(title = paste0("Trials: ", toupper(s), " / Decoded: MOST LIKELY")) +
+    labs(title = paste0("Decoding MOST LIKELY sounds")) +
     theme(plot.title = element_text(hjust = -0.2)) -> g.base.ml[["acc"]][[s]]
   
   # DIFFERENCE
@@ -1514,7 +1520,9 @@ for (s in c("sounds")) {
   df.plot.ml.corr %>% 
     filter(t_test >=-333, t_test <= 0) %>% 
     filter(stim == s, manip != "ORIGINAL – REORDERED") %>% 
-    mutate(manip = paste0(manip)) %>% #"Test data: ", 
+    mutate(manip = recode_factor(manip, 
+                                 ORIGINAL = "ORIGINAL", 
+                                 REORDERED = "EMPIRICAL NULL")) %>%
     mutate(direction = "") %>% 
     plot_base(col.pal = col.pal.corr,
               z = "r",
@@ -1551,7 +1559,7 @@ g.fig2.corr
 ### Assemble figure 2
 
 ```{r, fig.width = 8, fig.height = 5.5}
-(g.mostlikely) +
+(g.mostlikely + coord_fixed(0.5)) +
   plot_spacer() +
   ((g.fig2.acc / (g.fig2.corr + plot_layout(tag_level = 'new'))) + 
      plot_layout(heights = c(3, 1)) & 
@@ -1565,16 +1573,18 @@ g.fig2.corr
   theme(plot.tag.position = c(0, 1),
         plot.tag = element_text(vjust = 3)) -> g
 
+g
+
+(g.mostlikely + g.fig2.acc + plot_layout(widths = c(1, 3))) /
+  (plot_spacer() + g.fig2.corr + plot_layout(widths = c(1, 3))) +
+  plot_layout(heights = c(3, 1)) -> g
+
 if (save) {
   g %>% ggsave(filename = "./figures/fig2_MattersArising.png", width = 8, height = 5.5, dpi = 300, device = ragg::agg_png)
 }
 ```
 
 # Supplementary Figure 2
-
-## Confusion matrices
-
-### Single subject, single time point
 
 ```{r, fig.width = 6, fig.height = 2.3}
 
@@ -1637,5 +1647,11 @@ matrix_to_df2(mat.T$MP, "from", "to", "p") %>%
   theme(plot.caption = element_text(size = 10),
         axis.title = element_text(face = "italic"),
         legend.box.spacing = unit(2,"mm"),
-        )
+        ) -> g
+
+g
+
+if (save) {
+  g %>% ggsave(filename = "./figures/supfig2_MattersArising.png", width = 7, height = 2.5, dpi = 300, device = ragg::agg_png)
+}
 ```
