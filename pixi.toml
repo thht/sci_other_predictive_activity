@@ -3,7 +3,7 @@ authors = ["Thomas Hartmann <thomas.hartmann@th-ht.de>"]
 channels = ["conda-forge"]
 description = "Add a short description here"
 name = "sci_other_predictive_activity"
-platforms = ["linux-64"]
+platforms = ["linux-64", "osx-64"]
 version = "0.1.0"
 
 [tasks]
@@ -27,3 +27,4 @@ r-correlation = ">=0.8.5,<0.9"
 r-abind = ">=1.4_5,<2"
 r-tidyverse = ">=2.0.0,<3"
 r-reticulate = ">=1.39.0,<2"
+plus_sync = ">=0.7.0,<0.8"
