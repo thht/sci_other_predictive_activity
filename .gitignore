@@ -21,3 +21,6 @@ maths_files/
 # pixi environments
 .pixi
 *.egg-info
+
+data_synced
+data_nogit

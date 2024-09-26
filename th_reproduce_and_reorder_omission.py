@@ -1,8 +1,11 @@
+#%% imports
+
 from base import gat_stats
 import os.path as op
 import os, sys
 import numpy as np
 import mne
+import pandas as pd
 from mne.decoding import cross_val_multiscore, SlidingEstimator, GeneralizingEstimator
 import matplotlib.pyplot as plt
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -16,10 +19,13 @@ from base import corresp
 from base import events_simple_pred
 from base import cond2code
 
+#%% set variables
+
 #path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
 path_data = 'data_synced/upstream'
 #path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
 path_results = 'data_nogit/results'
+path_scratch = 'data_nogit/scratch'
 # define tmin and tmax
 tmin, tmax = -0.7, 0.7
 crop_twice = 0
@@ -28,26 +34,11 @@ v2only = 1
 # Start the main loop analysis - Loop on participant
 #for meg_rd, meg_mm, meg_mp, meg_or in zip(MEG_rds, MEG_mms, MEG_mps, MEG_ors):
 
-# Import the argparse module
-import argparse
+force_refilt = False
 
-# Create an ArgumentParser object
-parser = argparse.ArgumentParser()
+sids_to_use = [0]
 
-# Add the arguments to the parser
-parser.add_argument("--subject", type=int, default =-1, required=True)
-#parser.add_argument("--extract_filters_patterns", type=int, default =1)
-#parser.add_argument("--nfolds", type=int, default=5)
-parser.add_argument("--force_refilt", type=int, default=0)
-parser.add_argument("--exit_after", type=str, default='end')
-
-# Parse the arguments
-args = parser.parse_args()
-force_refilt = args.force_refilt
-
-sids_to_use = [args.subject]
-
-import pandas as pd
+#%% Gather subject data
 rows = [ dict(zip(['subj','block','cond','path'], v[:-15].split('_') + [v])  ) for v in os.listdir(path_data)]
 df = pd.DataFrame(rows)
 df['sid'] = df['subj'].apply(lambda x: corresp[x])
@@ -59,7 +50,9 @@ grp = df.groupby(['subj'])
 assert grp.size().min() == grp.size().max()
 assert grp.size().min() == 4
 
-for g,inds in grp.groups.items():
+#%% load data
+group_items_list = list(grp.groups.items())
+for g,inds in group_items_list:
     subdf = df.loc[inds]
 
     subdf= subdf.set_index('cond')
@@ -84,7 +77,7 @@ for g,inds in grp.groups.items():
     cond2epochs = {}
     cond2raw   = {}
 
-    p0 = op.join( os.path.expandvars('$SCRATCH/memerr/demarchi') , meg_rd[:-15] )
+    p0 = op.join( path_scratch , meg_rd[:-15] )
     if op.exists(op.join(p0, 'flt_rd-epo.fif')) and (not force_refilt):
         print('!!!!!   Loading precomputed filtered epochs from ',p0)
         #epochs_rd = mne.read_epochs( op.join(p0, 'flt_rd-epo.fif'))
@@ -128,6 +121,8 @@ for g,inds in grp.groups.items():
 
         raw_rd = cond2raw['random']
 
+    
+#%% Analyse
     # Save an epochs_rd to start from at each iteration on the decoding the reorders
     epochs_rd = cond2epochs['random']
     epochs_or = cond2epochs['ordered']

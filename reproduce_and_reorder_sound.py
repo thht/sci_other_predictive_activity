@@ -19,11 +19,15 @@ from base import events_omission, events_sound
 from base import reorder
 from base import getFiltPat
 
-os.environ['DEMARCHI_DATA_PATH'] ='/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi'
-so.environ['TEMP_DATA_DEMARCHI'] = '$SCRATCH/memerr/demarchi'
+#os.environ['DEMARCHI_DATA_PATH'] ='/p/project/icei-hbp-2022-0017/demarchi/data_demarchi/MEG_demarchi'
+os.environ['TEMP_DATA_DEMARCHI'] = '$SCRATCH/memerr/demarchi'
 
-path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
-path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
+#path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
+#path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
+#path_data = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/MEG'
+path_data = 'data_synced/upstream'
+#path_results = os.path.expandvars('$DEMARCHI_DATA_PATH') + '/results'
+path_results = 'data_nogit/results'
 # list all data files for each condition
 # DWARNING: this assumes same ordering of files (participants)
 #MEG_rds = sorted([f for f in os.listdir(path_data) if 'random' in f])

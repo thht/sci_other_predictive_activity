@@ -1,0 +1,12 @@
+project_name = "gd_markov"
+sync_folder = "data_synced"
+subject_id_regex = "[12][0-9]{7}[a-zA-Z]{4}"
+hash_subject_ids = false
+
+[[SFTP]]
+name = "upstream"
+globs = ["*.mat", "*.fif"]
+host = "obob-bomber-aweise.hpc.sbg.ac.at"
+user = "b1019547"
+remote_folder = "/mnt/obob/staff/gdemarchi/data/markov/raw/nosss/downsampled"
+port = 22
