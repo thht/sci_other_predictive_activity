@@ -377,12 +377,14 @@ for cond,epochs in cond2epochs.items():
     patterns = []
     for train, test in cv.split(Xreord, yreord):
         print(f"##############  Starting {cond} fold reord")
-        clf.fit(Xreord[train], yreord[train])  
+        # Check if this needs to be newly initialized
+        clf.fit(Xreord[train], yreord[train])
         if extract_filters_patterns:
             filters_, patterns_ = getFiltPat(clf)
             filters  += [filters_]
             patterns += [patterns_]
 
+        # This could be a problem. But only for random
         cv_reord_to__score = clf.score(X[test], y0[test])
         cv_reord_to_reord_score = clf.score(Xreord[test], yreord[test])
         dadd(scores,f'{s}_reord_to_{s}', cv_reord_to__score )
