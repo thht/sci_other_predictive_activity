@@ -242,10 +242,6 @@ lens_ext += [ (cond,len(ep) ) for cond,ep in cond2epochs.items() ]
 lens_ext += [ (cond+'_reord',len(ep) ) for cond,ep in cond2epochs_reord.items() ]
 lens_ext += [ (cond+'sp_reord',len(ep) ) for cond,ep in cond2epochs_sp_reord.items() ]
 
-if args.exit_after == 'prep_dat':
-    sys.exit(0)
-
-
 # helper function, check if the key is in the dict, if not -- creates it, otherwise add to it
 def dadd(d,k,v):
     if k in d:
