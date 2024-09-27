@@ -220,6 +220,9 @@ for cond,epochs in cond2epochs.items():
     cond2counts[cond+'_sp_reord'] = Counter(cond2epochs_sp_reord[cond].events[:,2])
 
 #%% check reordered data
+# Findings: As expected and specified by the reorder function, the reordered data in all condition
+# matches the data from the random condition. The function does what it is supposed to do.
+
 crop_tmin, crop_tmax = 0.1, 0.2
 
 original_random_epochs = epochs_rd_init.copy()
