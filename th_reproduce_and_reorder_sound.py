@@ -310,6 +310,10 @@ last_cut_sample = first_cut_sample + nsamples - 4
 prestim_last_cut_sample = int(np.ceil(-tmin * 100)) - 2
 prestim_first_cut_sample = prestim_last_cut_sample - nsamples + 4
 
+test_n_channels = 20
+
+list_for_df = []
+
 # cycle over entropies
 for cond,epochs in cond2epochs.items():
     print(f"-----  CV for {cond}")
@@ -368,6 +372,8 @@ for cond,epochs in cond2epochs.items():
 
     filters  = []
     patterns = []
+
+    n_fold = 1
     for train_rd, test_rd in cv.split(Xrd1, yrd1):
         print(f"##############  Starting {cond} fold")
         print('Lens of train and test are :',len(train_rd), len(test_rd) )
@@ -375,13 +381,13 @@ for cond,epochs in cond2epochs.items():
         # Let's check for potential overfitting because the pre stim data seen during testing
         # might have already been seen during training
 
-        train_data = np.hstack(Xrd1[train_rd, :, first_cut_sample:last_cut_sample])
+        train_data = np.hstack(Xrd1[train_rd, :, first_cut_sample-2:last_cut_sample+2])
         test_data = Xreord[test_rd]
 
-        prestim_match = np.zeros((10, test_data.shape[0]), dtype=bool)
-        poststim_match = np.zeros((10, test_data.shape[0]), dtype=bool)
+        prestim_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
+        poststim_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
 
-        for idx_channel in tqdm(list(range(10))):
+        for idx_channel in tqdm(list(range(test_n_channels))):
             prestim_testdata = test_data[:, idx_channel, prestim_first_cut_sample:prestim_last_cut_sample]
             poststim_testdata = test_data[:, idx_channel, first_cut_sample:last_cut_sample]
 
@@ -389,8 +395,19 @@ for cond,epochs in cond2epochs.items():
             poststim_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in poststim_testdata]
 
         print(f'prestim: {np.sum(np.all(prestim_match, axis=0))}, poststim: {np.sum(np.all(poststim_match, axis=0))}')
+        dict_for_df = {
+            'condition': cond,
+            'fold': n_fold,
+            'n_test_epochs': len(test_rd),
+            'prestim_matches_raw': prestim_match,
+            'poststim_matches_raw': poststim_match
+        }
 
-        break
+        list_for_df.append(dict_for_df)
+
+        n_fold += n_fold
+
+        continue
         
         # Run cross validation for the ordered (and reorder-order) (and keep the score on the random too only here)
         # Train and test with cross-validation
@@ -552,4 +569,5 @@ for cond,epochs in cond2epochs.items():
     import gc; gc.collect()
 
 
-# %%
+# %% analyize
+df = pd.DataFrame(list_for_df)
