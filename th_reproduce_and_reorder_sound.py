@@ -6,6 +6,7 @@ import numpy as np
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import mne
 from mne.decoding import cross_val_multiscore, SlidingEstimator, GeneralizingEstimator, LinearModel
@@ -218,6 +219,46 @@ for cond,epochs in cond2epochs.items():
 
     cond2counts[cond+'_sp_reord'] = Counter(cond2epochs_sp_reord[cond].events[:,2])
 
+#%% check reordered data
+crop_tmin, crop_tmax = 0.1, 0.2
+
+original_random_epochs = epochs_rd_init.copy()
+original_random_epochs.crop(crop_tmin, crop_tmax)
+original_random_epochs_array = original_random_epochs.get_data()
+all_conditions = list(cond2epochs.keys())
+
+dicts_for_pandas = []
+
+for cur_condition in tqdm(all_conditions):
+    this_cond = {
+        'original_epochs': cond2epochs[cur_condition].copy().crop(crop_tmin, crop_tmax).get_data(),
+        'reordered_epochs': cond2epochs_reord[cur_condition].copy().crop(crop_tmin, crop_tmax).get_data(),
+        'reordered_sp_epochs': cond2epochs_sp_reord[cur_condition].copy().crop(crop_tmin, crop_tmax).get_data()
+    }
+
+    for kind, data in tqdm(this_cond.items()):
+        this_matches = np.zeros((data.shape[0], ), dtype=bool)
+        for idx, this_data in enumerate(data):
+            is_in_there = np.any([np.all(this_data == cur_random_data) for cur_random_data in original_random_epochs_array])
+            this_matches[idx] = is_in_there
+
+        tmp_dict = {
+            'condition': cur_condition,
+            'kind': kind,
+            'matches': this_matches
+        }
+        
+        dicts_for_pandas.append(tmp_dict)
+
+df_matches = pd.DataFrame(dicts_for_pandas)
+
+#%% some further analysis
+df_matches['all_match'] = df_matches['matches'].apply(lambda x: np.all(x))
+    
+
+
+#%% go on.
+
 
 # save counts of all classes to process later (not in this script)
 fnf = op.join(results_folder, f'cond2counts.npz' )
@@ -335,6 +376,21 @@ for cond,epochs in cond2epochs.items():
             print('{} test_rd among orig_nums_reord. Total = {} '.format( len(test_reord), len(test_rd) ) )
             cv_rd_to_reord_score = clf.score(Xreord[test_reord], yreord[test_reord])
         else:
+            # Check for overlap in trials
+            train_data = Xrd1[train_rd]
+            test_data = Xreord[test_rd]
+            first_cut_sample = int(np.ceil(-tmin * 100)) + 2  # start 2 samples later and end two samples earlier...
+            last_cut_sample = first_cut_sample + nsamples - 4
+            train_data_cut = train_data[:, :, first_cut_sample:last_cut_sample]
+            test_data_cut = test_data[:, :, first_cut_sample:last_cut_sample]
+
+            test_in_train_data = np.zeros((test_data_cut.shape[0], ), dtype=bool)
+
+            for idx, cur_data in enumerate(test_data_cut):
+                is_in_there = np.any([np.all(cur_data == cur_train_data) for cur_train_data in train_data_cut])
+                test_in_train_data[idx] = is_in_there
+
+            print(f'Found {np.sum(test_in_train_data)} overlapping trials for condition {cond}.')
             cv_rd_to_reord_score = clf.score(Xreord[test_rd], yreord[test_rd])
             cv_rd_to_reord_sp_score = clf.score(Xreord[test_rd], yreord_sp[test_rd])
 
