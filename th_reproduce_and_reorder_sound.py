@@ -14,6 +14,9 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.pipeline import make_pipeline
 from sklearn.model_selection import StratifiedKFold
 from collections import Counter
+import scipy.signal
+
+from th import is_subarray
 
 from base import corresp
 from base import events_simple_pred
@@ -223,40 +226,40 @@ for cond,epochs in cond2epochs.items():
 # Findings: As expected and specified by the reorder function, the reordered data in all condition
 # matches the data from the random condition. The function does what it is supposed to do.
 
-crop_tmin, crop_tmax = 0.1, 0.2
+# crop_tmin, crop_tmax = 0.1, 0.2
 
-original_random_epochs = epochs_rd_init.copy()
-original_random_epochs.crop(crop_tmin, crop_tmax)
-original_random_epochs_array = original_random_epochs.get_data()
-all_conditions = list(cond2epochs.keys())
+# original_random_epochs = epochs_rd_init.copy()
+# original_random_epochs.crop(crop_tmin, crop_tmax)
+# original_random_epochs_array = original_random_epochs.get_data()
+# all_conditions = list(cond2epochs.keys())
 
-dicts_for_pandas = []
+# dicts_for_pandas = []
 
-for cur_condition in tqdm(all_conditions):
-    this_cond = {
-        'original_epochs': cond2epochs[cur_condition].copy().crop(crop_tmin, crop_tmax).get_data(),
-        'reordered_epochs': cond2epochs_reord[cur_condition].copy().crop(crop_tmin, crop_tmax).get_data(),
-        'reordered_sp_epochs': cond2epochs_sp_reord[cur_condition].copy().crop(crop_tmin, crop_tmax).get_data()
-    }
+# for cur_condition in tqdm(all_conditions):
+#     this_cond = {
+#         'original_epochs': cond2epochs[cur_condition].copy().crop(crop_tmin, crop_tmax).get_data(),
+#         'reordered_epochs': cond2epochs_reord[cur_condition].copy().crop(crop_tmin, crop_tmax).get_data(),
+#         'reordered_sp_epochs': cond2epochs_sp_reord[cur_condition].copy().crop(crop_tmin, crop_tmax).get_data()
+#     }
 
-    for kind, data in tqdm(this_cond.items()):
-        this_matches = np.zeros((data.shape[0], ), dtype=bool)
-        for idx, this_data in enumerate(data):
-            is_in_there = np.any([np.all(this_data == cur_random_data) for cur_random_data in original_random_epochs_array])
-            this_matches[idx] = is_in_there
+#     for kind, data in tqdm(this_cond.items()):
+#         this_matches = np.zeros((data.shape[0], ), dtype=bool)
+#         for idx, this_data in enumerate(data):
+#             is_in_there = np.any([np.all(this_data == cur_random_data) for cur_random_data in original_random_epochs_array])
+#             this_matches[idx] = is_in_there
 
-        tmp_dict = {
-            'condition': cur_condition,
-            'kind': kind,
-            'matches': this_matches
-        }
+#         tmp_dict = {
+#             'condition': cur_condition,
+#             'kind': kind,
+#             'matches': this_matches
+#         }
         
-        dicts_for_pandas.append(tmp_dict)
+#         dicts_for_pandas.append(tmp_dict)
 
-df_matches = pd.DataFrame(dicts_for_pandas)
+# df_matches = pd.DataFrame(dicts_for_pandas)
 
 #%% some further analysis
-df_matches['all_match'] = df_matches['matches'].apply(lambda x: np.all(x))
+#df_matches['all_match'] = df_matches['matches'].apply(lambda x: np.all(x))
     
 
 
@@ -301,6 +304,12 @@ else:
 clf = GeneralizingEstimator(clf, n_jobs=-1, scoring='accuracy', verbose=gen_est_verbose)
 #condcond2scores = {} # tuples of cond and reord 2 scores
 
+first_cut_sample = int(np.ceil(-tmin * 100)) + 2  # start 2 samples later and end two samples earlier...
+last_cut_sample = first_cut_sample + nsamples - 4
+
+prestim_last_cut_sample = int(np.ceil(-tmin * 100)) - 2
+prestim_first_cut_sample = prestim_last_cut_sample - nsamples + 4
+
 # cycle over entropies
 for cond,epochs in cond2epochs.items():
     print(f"-----  CV for {cond}")
@@ -318,6 +327,12 @@ for cond,epochs in cond2epochs.items():
     # TODO: find way to use both sp and not sp, reord and not
 
     # keep same trials in epochs_rd and epochs_reord
+    # TH: I think this is the trick that they do to avoid overfitting.
+    # They take the random epochs but reorder them so that their order
+    # matches the one in the reordered data.
+    # If this is true, then the post stimulus part of all the epochs in 
+    # Xrd1 and Xreord must match completely and be in the same order....
+    # We're going to check this below...
     epochs_rd1 = epochs_rd_init[orig_nums_reord][:minl]
     Xrd1 = epochs_rd1.get_data()
     yrd1 = epochs_rd1.events[:, 2]
@@ -345,11 +360,38 @@ for cond,epochs in cond2epochs.items():
     s = cond2code[cond]
     scores = {} # score type 2 score
 
+    # For this to work, all poststim data of Xrd1 and Xreord must match exactly
+    test_Xrd1 = Xrd1[:, :, first_cut_sample:last_cut_sample]
+    test_Xreord = Xreord[:, :, first_cut_sample:last_cut_sample]
+
+    print(f'Poststim part of Xrd1 and Xreord matches: {np.all(test_Xrd1 == test_Xreord)}')
+
     filters  = []
     patterns = []
     for train_rd, test_rd in cv.split(Xrd1, yrd1):
         print(f"##############  Starting {cond} fold")
         print('Lens of train and test are :',len(train_rd), len(test_rd) )
+        
+        # Let's check for potential overfitting because the pre stim data seen during testing
+        # might have already been seen during training
+
+        train_data = np.hstack(Xrd1[train_rd, :, first_cut_sample:last_cut_sample])
+        test_data = Xreord[test_rd]
+
+        prestim_match = np.zeros((10, test_data.shape[0]), dtype=bool)
+        poststim_match = np.zeros((10, test_data.shape[0]), dtype=bool)
+
+        for idx_channel in tqdm(list(range(10))):
+            prestim_testdata = test_data[:, idx_channel, prestim_first_cut_sample:prestim_last_cut_sample]
+            poststim_testdata = test_data[:, idx_channel, first_cut_sample:last_cut_sample]
+
+            prestim_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in prestim_testdata]
+            poststim_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in poststim_testdata]
+
+        print(f'prestim: {np.sum(np.all(prestim_match, axis=0))}, poststim: {np.sum(np.all(poststim_match, axis=0))}')
+
+        break
+        
         # Run cross validation for the ordered (and reorder-order) (and keep the score on the random too only here)
         # Train and test with cross-validation
         clf.fit(Xrd1[train_rd], yrd1[train_rd])  # fit on random
@@ -382,8 +424,6 @@ for cond,epochs in cond2epochs.items():
             # Check for overlap in trials
             train_data = Xrd1[train_rd]
             test_data = Xreord[test_rd]
-            first_cut_sample = int(np.ceil(-tmin * 100)) + 2  # start 2 samples later and end two samples earlier...
-            last_cut_sample = first_cut_sample + nsamples - 4
             train_data_cut = train_data[:, :, first_cut_sample:last_cut_sample]
             test_data_cut = test_data[:, :, first_cut_sample:last_cut_sample]
 
@@ -408,6 +448,7 @@ for cond,epochs in cond2epochs.items():
         dadd(scores,f'rd_to_{s}_reord_sp',cv_rd_to_reord_sp_score   )
         dadd(scores,f'rd_to_{s}_sp_reord',cv_rd_to_sp_reord_score   )
         #'cv'
+    continue
     filters_rd,patterns_rd = np.array(filters), np.array(patterns)
 
     # train on non-random and test on same or reord (to make "self" plots)
@@ -510,3 +551,5 @@ for cond,epochs in cond2epochs.items():
     #np.save(op.join(results_folder, f'cv_rd_to_{s}__sp_scores.npy'), cv_rd_to_reord_scores)
     import gc; gc.collect()
 
+
+# %%
