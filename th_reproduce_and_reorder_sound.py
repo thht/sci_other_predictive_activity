@@ -310,7 +310,7 @@ last_cut_sample = first_cut_sample + nsamples - 4
 prestim_last_cut_sample = int(np.ceil(-tmin * 100)) - 2
 prestim_first_cut_sample = prestim_last_cut_sample - nsamples + 4
 
-test_n_channels = 20
+test_n_channels = 5
 
 list_for_df = []
 
@@ -381,7 +381,7 @@ for cond,epochs in cond2epochs.items():
         # Let's check for potential overfitting because the pre stim data seen during testing
         # might have already been seen during training
 
-        train_data = np.hstack(Xrd1[train_rd, :, first_cut_sample-2:last_cut_sample+2])
+        train_data = np.hstack(Xrd1[train_rd, :, first_cut_sample-6:last_cut_sample+6])
         test_data = Xreord[test_rd]
 
         prestim_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
@@ -405,7 +405,7 @@ for cond,epochs in cond2epochs.items():
 
         list_for_df.append(dict_for_df)
 
-        n_fold += n_fold
+        n_fold += 1
 
         continue
         
@@ -571,3 +571,11 @@ for cond,epochs in cond2epochs.items():
 
 # %% analyize
 df = pd.DataFrame(list_for_df)
+df['prestim_matches_sum'] = df['prestim_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
+df['poststim_matches_sum'] = df['poststim_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
+
+df_by_condition = df[['condition', 'n_test_epochs', 'prestim_matches_sum', 'poststim_matches_sum']].groupby('condition').sum()
+
+df_by_condition['prestim_match_ratio'] = df_by_condition['prestim_matches_sum'] / df_by_condition['n_test_epochs']
+df_by_condition['poststim_match_ratio'] = df_by_condition['poststim_matches_sum'] / df_by_condition['n_test_epochs']
+# %%
