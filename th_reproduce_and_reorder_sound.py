@@ -177,7 +177,10 @@ for cond,epochs in cond2epochs.items():
     if om_fo[-1] == len(epochs.events):
         om_fo = np.delete(om_fo, -1)
     # remove these indices from random epochs
-    cond2epochs[cond] = epochs.drop(om_fo)
+    #cond2epochs[cond] = epochs.drop(om_fo)
+    for idx in range(epochs.events.shape[0]):
+        if epochs.events[idx, 2] >= 10:
+            epochs.events[idx, 2] /= 10
 
     cond2counts[cond] = Counter(cond2epochs[cond].events[:,2])
 
@@ -304,11 +307,23 @@ else:
 clf = GeneralizingEstimator(clf, n_jobs=-1, scoring='accuracy', verbose=gen_est_verbose)
 #condcond2scores = {} # tuples of cond and reord 2 scores
 
-first_cut_sample = int(np.ceil(-tmin * 100)) + 2  # start 2 samples later and end two samples earlier...
-last_cut_sample = first_cut_sample + nsamples - 4
+#first_cut_sample = int(np.ceil(-tmin * 100)) + 2  # start 2 samples later and end two samples earlier...
+#last_cut_sample = first_cut_sample + nsamples - 4
 
-prestim_last_cut_sample = int(np.ceil(-tmin * 100)) - 2
-prestim_first_cut_sample = prestim_last_cut_sample - nsamples + 4
+first_cut_sample = epochs.time_as_index(0)[0]
+last_cut_sample = epochs.time_as_index(0.33)[0]
+
+prestim_last_cut_sample = epochs.time_as_index(0)[0] + 2
+prestim_first_cut_sample = epochs.time_as_index(-.33)[0] - 2
+
+#prestim_last_cut_sample = int(np.ceil(-tmin * 100)) - 2
+#prestim_first_cut_sample = prestim_last_cut_sample - nsamples + 4
+
+
+print(f'Prestim Window: {epochs.times[prestim_first_cut_sample]} - {epochs.times[prestim_last_cut_sample]}')
+print(f'Poststim Window: {epochs.times[first_cut_sample]} - {epochs.times[last_cut_sample]}')
+
+template_epochs = epochs.copy()
 
 test_n_channels = 5
 
@@ -319,7 +334,8 @@ for cond,epochs in cond2epochs.items():
     print(f"-----  CV for {cond}")
 
     # keep only the same number of trials for all conditions
-    epochs = epochs[:minl]  
+    epochs = epochs[:minl]
+    assert np.all(epochs.times == template_epochs.times)
     # get the X and Y for each condition in numpy array
     X = epochs.get_data()
     y_sp_ = events_simple_pred(epochs.events.copy() , cond2code[cond])
@@ -327,6 +343,7 @@ for cond,epochs in cond2epochs.items():
 
     #----------
     epochs_reord = cond2epochs_reord[cond][:minl]
+    assert np.all(epochs_reord.times == template_epochs.times)
     orig_nums_reord = cond2orig_nums_reord[cond] 
     # TODO: find way to use both sp and not sp, reord and not
 
@@ -338,6 +355,7 @@ for cond,epochs in cond2epochs.items():
     # Xrd1 and Xreord must match completely and be in the same order....
     # We're going to check this below...
     epochs_rd1 = epochs_rd_init[orig_nums_reord][:minl]
+    assert np.all(epochs_rd1.times == template_epochs.times)
     Xrd1 = epochs_rd1.get_data()
     yrd1 = epochs_rd1.events[:, 2]
 
@@ -381,26 +399,38 @@ for cond,epochs in cond2epochs.items():
         # Let's check for potential overfitting because the pre stim data seen during testing
         # might have already been seen during training
 
-        train_data = np.hstack(Xrd1[train_rd, :, first_cut_sample-6:last_cut_sample+6])
+        train_data = np.hstack(Xrd1[train_rd, :, first_cut_sample:last_cut_sample])
         test_data = Xreord[test_rd]
+        original_cond_test_data = X[test_rd]
 
         prestim_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
         poststim_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
+        prestim_orig_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
+        poststim_orig_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
 
         for idx_channel in tqdm(list(range(test_n_channels))):
             prestim_testdata = test_data[:, idx_channel, prestim_first_cut_sample:prestim_last_cut_sample]
             poststim_testdata = test_data[:, idx_channel, first_cut_sample:last_cut_sample]
 
+            prestim_orig_testdata = original_cond_test_data[:, idx_channel, prestim_first_cut_sample:prestim_last_cut_sample]
+            poststim_orig_testdata = original_cond_test_data[:, idx_channel, first_cut_sample:last_cut_sample]
+
             prestim_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in prestim_testdata]
             poststim_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in poststim_testdata]
 
+            prestim_orig_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in prestim_orig_testdata]
+            poststim_orig_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in poststim_orig_testdata]
+
         print(f'prestim: {np.sum(np.all(prestim_match, axis=0))}, poststim: {np.sum(np.all(poststim_match, axis=0))}')
+        print(f'prestim_orig: {np.sum(np.all(prestim_orig_match, axis=0))}, poststim_orig: {np.sum(np.all(poststim_orig_match, axis=0))}')
         dict_for_df = {
             'condition': cond,
             'fold': n_fold,
             'n_test_epochs': len(test_rd),
             'prestim_matches_raw': prestim_match,
-            'poststim_matches_raw': poststim_match
+            'poststim_matches_raw': poststim_match,
+            'prestim_orig_matches_raw': prestim_match,
+            'poststim_orig_matches_raw': poststim_match
         }
 
         list_for_df.append(dict_for_df)
@@ -573,9 +603,13 @@ for cond,epochs in cond2epochs.items():
 df = pd.DataFrame(list_for_df)
 df['prestim_matches_sum'] = df['prestim_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
 df['poststim_matches_sum'] = df['poststim_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
+df['prestim_orig_matches_sum'] = df['prestim_orig_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
+df['poststim_orig_matches_sum'] = df['poststim_orig_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
 
-df_by_condition = df[['condition', 'n_test_epochs', 'prestim_matches_sum', 'poststim_matches_sum']].groupby('condition').sum()
+df_by_condition = df[['condition', 'n_test_epochs', 'prestim_matches_sum', 'poststim_matches_sum', 'prestim_orig_matches_sum', 'poststim_orig_matches_sum']].groupby('condition').sum()
 
 df_by_condition['prestim_match_ratio'] = df_by_condition['prestim_matches_sum'] / df_by_condition['n_test_epochs']
 df_by_condition['poststim_match_ratio'] = df_by_condition['poststim_matches_sum'] / df_by_condition['n_test_epochs']
+df_by_condition['prestim_orig_match_ratio'] = df_by_condition['prestim_orig_matches_sum'] / df_by_condition['n_test_epochs']
+df_by_condition['poststim_orig_match_ratio'] = df_by_condition['poststim_orig_matches_sum'] / df_by_condition['n_test_epochs']
 # %%
