@@ -16,7 +16,7 @@ from sklearn.model_selection import StratifiedKFold
 from collections import Counter
 import scipy.signal
 
-from th import is_subarray
+from th import is_subarray, find_in_epochs
 
 from base import corresp
 from base import events_simple_pred
@@ -399,38 +399,64 @@ for cond,epochs in cond2epochs.items():
         # Let's check for potential overfitting because the pre stim data seen during testing
         # might have already been seen during training
 
-        train_data = np.hstack(Xrd1[train_rd, :, first_cut_sample:last_cut_sample])
+        train_data_nonstacked = Xrd1[train_rd, :test_n_channels, first_cut_sample:last_cut_sample] 
+        train_data = np.hstack(train_data_nonstacked)
         test_data = Xreord[test_rd]
         original_cond_test_data = X[test_rd]
+        #control_data = Xrd1.copy()
+        control_data = train_data_nonstacked.copy()
 
         prestim_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
         poststim_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
         prestim_orig_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
         poststim_orig_match = np.zeros((test_n_channels, test_data.shape[0]), dtype=bool)
 
-        for idx_channel in tqdm(list(range(test_n_channels))):
-            prestim_testdata = test_data[:, idx_channel, prestim_first_cut_sample:prestim_last_cut_sample]
-            poststim_testdata = test_data[:, idx_channel, first_cut_sample:last_cut_sample]
+        #for idx_channel in tqdm(list(range(test_n_channels))):
+        #    prestim_testdata = test_data[:, idx_channel, prestim_first_cut_sample:prestim_last_cut_sample]
+        #    poststim_testdata = test_data[:, idx_channel, first_cut_sample:last_cut_sample]
 
-            prestim_orig_testdata = original_cond_test_data[:, idx_channel, prestim_first_cut_sample:prestim_last_cut_sample]
-            poststim_orig_testdata = original_cond_test_data[:, idx_channel, first_cut_sample:last_cut_sample]
+        #    prestim_orig_testdata = original_cond_test_data[:, idx_channel, prestim_first_cut_sample:prestim_last_cut_sample]
+        #    poststim_orig_testdata = original_cond_test_data[:, idx_channel, first_cut_sample:last_cut_sample]
 
-            prestim_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in prestim_testdata]
-            poststim_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in poststim_testdata]
+            #prestim_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in prestim_testdata]
+            #poststim_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in poststim_testdata]
 
-            prestim_orig_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in prestim_orig_testdata]
-            poststim_orig_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in poststim_orig_testdata]
+            #prestim_orig_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in prestim_orig_testdata]
+            #poststim_orig_match[idx_channel, :] = [is_subarray(train_data[idx_channel, :], pt) for pt in poststim_orig_testdata]
 
-        print(f'prestim: {np.sum(np.all(prestim_match, axis=0))}, poststim: {np.sum(np.all(poststim_match, axis=0))}')
-        print(f'prestim_orig: {np.sum(np.all(prestim_orig_match, axis=0))}, poststim_orig: {np.sum(np.all(poststim_orig_match, axis=0))}')
+        prestim_testdata = test_data[:, :test_n_channels, prestim_first_cut_sample:prestim_last_cut_sample]
+        poststim_testdata = test_data[:, :test_n_channels, first_cut_sample:last_cut_sample]
+
+        prestim_control = control_data[:, :test_n_channels, prestim_first_cut_sample:prestim_last_cut_sample]
+        #poststim_control = control_data[:, :test_n_channels, first_cut_sample:last_cut_sample]
+        poststim_control = control_data
+
+        prestim_orig_testdata = original_cond_test_data[:, :test_n_channels, prestim_first_cut_sample:prestim_last_cut_sample]
+        poststim_orig_testdata = original_cond_test_data[:, :test_n_channels, first_cut_sample:last_cut_sample]
+        
+        # prestim_match = find_in_epochs(prestim_testdata, train_data_nonstacked)
+        # poststim_match = find_in_epochs(poststim_testdata, train_data_nonstacked)
+
+        # prestin_orig_match = find_in_epochs(prestim_orig_testdata, train_data_nonstacked)
+        # poststim_orig_match = find_in_epochs(poststim_orig_testdata, train_data_nonstacked)
+
+        #prestim_control_match = find_in_epochs(prestim_control, train_data_nonstacked)
+        poststim_control_match = find_in_epochs(poststim_control, train_data_nonstacked)
+
+        #print(f'prestim: {np.sum(np.all(prestim_match, axis=0))}, poststim: {np.sum(np.all(poststim_match, axis=0))}')
+        #print(f'prestim_orig: {np.sum(np.all(prestim_orig_match, axis=0))}, poststim_orig: {np.sum(np.all(poststim_orig_match, axis=0))}')
+        #print(f'prestim_control: {np.sum(np.all(prestim_control_match, axis=0))}, poststim_control: {np.sum(np.all(poststim_control_match, axis=0))}')
+        print(f'poststim_control: {np.sum(np.all(poststim_control_match, axis=0))}')
         dict_for_df = {
             'condition': cond,
             'fold': n_fold,
             'n_test_epochs': len(test_rd),
             'prestim_matches_raw': prestim_match,
             'poststim_matches_raw': poststim_match,
-            'prestim_orig_matches_raw': prestim_match,
-            'poststim_orig_matches_raw': poststim_match
+            'prestim_orig_matches_raw': prestin_orig_match,
+            'poststim_orig_matches_raw': poststim_orig_match,
+            'prestim_control_matches_raw': prestim_control_match,
+            'poststim_control_matches_raw': poststim_control_match
         }
 
         list_for_df.append(dict_for_df)
@@ -605,11 +631,15 @@ df['prestim_matches_sum'] = df['prestim_matches_raw'].apply(lambda x: np.sum(np.
 df['poststim_matches_sum'] = df['poststim_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
 df['prestim_orig_matches_sum'] = df['prestim_orig_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
 df['poststim_orig_matches_sum'] = df['poststim_orig_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
+df['prestim_control_matches_sum'] = df['prestim_control_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
+df['poststim_control_matches_sum'] = df['poststim_control_matches_raw'].apply(lambda x: np.sum(np.all(x, axis=0)))
 
-df_by_condition = df[['condition', 'n_test_epochs', 'prestim_matches_sum', 'poststim_matches_sum', 'prestim_orig_matches_sum', 'poststim_orig_matches_sum']].groupby('condition').sum()
+df_by_condition = df[['condition', 'n_test_epochs', 'prestim_matches_sum', 'poststim_matches_sum', 'prestim_orig_matches_sum', 'poststim_orig_matches_sum', 'prestim_control_matches_sum', 'poststim_control_matches_sum']].groupby('condition').sum()
 
 df_by_condition['prestim_match_ratio'] = df_by_condition['prestim_matches_sum'] / df_by_condition['n_test_epochs']
 df_by_condition['poststim_match_ratio'] = df_by_condition['poststim_matches_sum'] / df_by_condition['n_test_epochs']
 df_by_condition['prestim_orig_match_ratio'] = df_by_condition['prestim_orig_matches_sum'] / df_by_condition['n_test_epochs']
 df_by_condition['poststim_orig_match_ratio'] = df_by_condition['poststim_orig_matches_sum'] / df_by_condition['n_test_epochs']
+df_by_condition['prestim_control_match_ratio'] = df_by_condition['prestim_control_matches_sum'] / df_by_condition['n_test_epochs']
+df_by_condition['poststim_control_match_ratio'] = df_by_condition['poststim_control_matches_sum'] / df_by_condition['n_test_epochs']
 # %%
