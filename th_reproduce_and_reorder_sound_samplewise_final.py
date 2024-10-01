@@ -1,29 +1,21 @@
 #%% imports
 
 import os.path as op
-import os, sys
+import os
 import numpy as np
-import argparse
 import pandas as pd
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 import mne
-from mne.decoding import cross_val_multiscore, SlidingEstimator, GeneralizingEstimator, LinearModel
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.pipeline import make_pipeline
 from sklearn.model_selection import StratifiedKFold, KFold
 from collections import Counter
-import scipy.signal
 
-from th import is_subarray, find_in_epochs
 
 from base import corresp
 from base import events_simple_pred
 from base import cond2code
 from base import events_omission, events_sound
 from base import reorder
-from base import getFiltPat
 
 #%% set variables
 
