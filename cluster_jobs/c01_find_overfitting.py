@@ -261,7 +261,8 @@ class FindOverfittingJob(Job):
         testing_windows = {
             'prepre': (epochs.time_as_index(-0.66)[0] + 1, epochs.time_as_index(-0.33)[0] - 1),
             'pre': (epochs.time_as_index(-0.33)[0] + 1, epochs.time_as_index(0)[0] - 1),
-            'post': training_window
+            'post': training_window,
+            'postpost': (epochs.time_as_index(0.33)[0] + 1, epochs.time_as_index(0.66)[0] - 1)
         }
 
         # we need to know minimum number of trials to use it always (they don't actually differ that much but it reduces headache with folds correspondance)
