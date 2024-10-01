@@ -263,8 +263,18 @@ np.savez(fnf , cond2counts )
 ###################################################################
 #%% setup classification
 print("------------   Starting CV")
-#cv = StratifiedKFold(nfolds, shuffle=shuffle_cv)
-cv = KFold(nfolds, shuffle=shuffle_cv)
+
+cvs = {
+    'normal': KFold(nfolds, shuffle=shuffle_cv),
+    'stratified': StratifiedKFold(nfolds, shuffle=shuffle_cv)
+}
+
+training_window = (epochs.time_as_index(0)[0] + 1, epochs.time_as_index(0.33)[0] - 1)
+testing_windows = {
+    'prepre': (epochs.time_as_index(-0.66)[0] + 1, epochs.time_as_index(-0.33)[0] - 1),
+    'pre': (epochs.time_as_index(-0.33)[0] + 1, epochs.time_as_index(0)[0] - 1),
+    'post': training_window
+}
 
 # we need to know minimum number of trials to use it always (they don't actually differ that much but it reduces headache with folds correspondance)
 lens = [ len(ep) for ep in cond2epochs.values() ]
@@ -277,205 +287,106 @@ lens_ext += [ (cond,len(ep) ) for cond,ep in cond2epochs.items() ]
 lens_ext += [ (cond+'_reord',len(ep) ) for cond,ep in cond2epochs_reord.items() ]
 lens_ext += [ (cond+'sp_reord',len(ep) ) for cond,ep in cond2epochs_sp_reord.items() ]
 
-# helper function, check if the key is in the dict, if not -- creates it, otherwise add to it
-def dadd(d,k,v):
-    if k in d:
-        d[k] += [v]
-    else:
-        d[k] = [v]
-
-# Initialize classifier
-if extract_filters_patterns:
-    clf = LinearModel(LinearDiscriminantAnalysis() ); 
-else:
-    clf = make_pipeline(LinearDiscriminantAnalysis())
-clf = GeneralizingEstimator(clf, n_jobs=-1, scoring='accuracy', verbose=gen_est_verbose)
-
-first_cut_sample = epochs.time_as_index(0)[0] + 1
-last_cut_sample = epochs.time_as_index(0.33)[0] - 1
-
-prestim_last_cut_sample = epochs.time_as_index(0)[0] - 1
-prestim_first_cut_sample = epochs.time_as_index(-.33)[0] + 2
-
-print(f'Prestim Window: {epochs.times[prestim_first_cut_sample]} - {epochs.times[prestim_last_cut_sample]}')
-print(f'Poststim Window: {epochs.times[first_cut_sample]} - {epochs.times[last_cut_sample]}')
-
-template_epochs = epochs.copy()
-
 list_for_df = []
 
 # cycle over entropies
-for cond,epochs in cond2epochs.items():
-    print(f"-----  CV for {cond}")
+for cv_label, cv in cvs.items():
+    for testing_window_label, testing_window in testing_windows.items():
+        for cond,epochs in cond2epochs.items():
+            print(f"-----  CV for {cond}")
 
-    # keep only the same number of trials for all conditions
-    epochs = epochs[:minl]
-    assert np.all(epochs.times == template_epochs.times)
-    # get the X and Y for each condition in numpy array
-    X = epochs.get_data()
-    y_sp_ = events_simple_pred(epochs.events.copy() , cond2code[cond])
-    y_sp = y_sp_[:, 2] 
+            # keep only the same number of trials for all conditions
+            epochs = epochs[:minl]
+            # get the X and Y for each condition in numpy array
+            X = epochs.get_data()
+            y_sp_ = events_simple_pred(epochs.events.copy() , cond2code[cond])
+            y_sp = y_sp_[:, 2] 
 
-    #----------
-    epochs_reord = cond2epochs_reord[cond][:minl]
-    assert np.all(epochs_reord.times == template_epochs.times)
-    orig_nums_reord = cond2orig_nums_reord[cond] 
-    # TODO: find way to use both sp and not sp, reord and not
+            #----------
+            epochs_reord = cond2epochs_reord[cond][:minl]
 
-    # keep same trials in epochs_rd and epochs_reord
-    # TH: I think this is the trick that they do to avoid overfitting.
-    # They take the random epochs but reorder them so that their order
-    # matches the one in the reordered data.
-    # If this is true, then the post stimulus part of all the epochs in 
-    # Xrd1 and Xreord must match completely and be in the same order....
-    # We're going to check this below...
-    epochs_rd1 = epochs_rd_init[orig_nums_reord][:minl]
-    assert np.all(epochs_rd1.times == template_epochs.times)
-    Xrd1 = epochs_rd1.get_data()
-    yrd1 = epochs_rd1.events[:, 2]
+            orig_nums_reord = cond2orig_nums_reord[cond] 
+            # TODO: find way to use both sp and not sp, reord and not
 
-    epochs_sp_reord = cond2epochs_sp_reord[cond]
-    #orig_nums_sp_reord = cond2orig_nums_sp_reord[cond] 
-    #
-    #epochs_rd2 = epochs_rd_init[orig_nums_sp_reord][:minl]
-    #Xrd2 = epochs_rd2.get_data()
-    #yrd2 = epochs_rd2.events[:, 2]
+            # keep same trials in epochs_rd and epochs_reord
+            # TH: I think this is the trick that they do to avoid overfitting.
+            # They take the random epochs but reorder them so that their order
+            # matches the one in the reordered data.
+            # If this is true, then the post stimulus part of all the epochs in 
+            # Xrd1 and Xreord must match completely and be in the same order....
+            # We're going to check this below...
+            epochs_rd1 = epochs_rd_init[orig_nums_reord][:minl]
 
-    y0_ = epochs.events.copy()[:minl]
-    y0 = y0_[:, 2] 
+            Xrd1 = epochs_rd1.get_data()
+            yrd1 = epochs_rd1.events[:, 2]
 
-    Xreord = epochs_reord.get_data()[:minl]
-    yreord_ = epochs_reord.events
-    yreord = yreord_[:, 2]
-    yreord_sp = events_simple_pred(yreord_, cond2code[cond])[:, 2]
+            epochs_sp_reord = cond2epochs_sp_reord[cond]
+            #orig_nums_sp_reord = cond2orig_nums_sp_reord[cond] 
+            #
+            #epochs_rd2 = epochs_rd_init[orig_nums_sp_reord][:minl]
+            #Xrd2 = epochs_rd2.get_data()
+            #yrd2 = epochs_rd2.events[:, 2]
 
-    #Xsp_reord = epochs_sp_reord.get_data()[:minl]
-    ysp_reord_ = epochs_sp_reord.events
-    ysp_reord = ysp_reord_[:, 2]
+            y0_ = epochs.events.copy()[:minl]
+            y0 = y0_[:, 2] 
 
-    # get short entropy condition code to generate save filenames
-    s = cond2code[cond]
-    scores = {} # score type 2 score
+            Xreord = epochs_reord.get_data()[:minl]
+            yreord_ = epochs_reord.events
+            yreord = yreord_[:, 2]
+            yreord_sp = events_simple_pred(yreord_, cond2code[cond])[:, 2]
 
-    # For this to work, all poststim data of Xrd1 and Xreord must match exactly
-    test_Xrd1 = Xrd1[:, :, first_cut_sample:last_cut_sample]
-    test_Xreord = Xreord[:, :, first_cut_sample:last_cut_sample]
+            #Xsp_reord = epochs_sp_reord.get_data()[:minl]
+            ysp_reord_ = epochs_sp_reord.events
+            ysp_reord = ysp_reord_[:, 2]
 
-    print(f'Poststim part of Xrd1 and Xreord matches: {np.all(test_Xrd1 == test_Xreord)}')
+            # get short entropy condition code to generate save filenames
+            s = cond2code[cond]
+            scores = {} # score type 2 score
 
-    filters  = []
-    patterns = []
+            filters  = []
+            patterns = []
 
-    n_fold = 1
-    for train_rd, test_rd in cv.split(Xrd1, yrd1):
-        print(f"##############  Starting {cond} fold")
-        print('Lens of train and test are :',len(train_rd), len(test_rd) )
-        
-        # Let's check for potential overfitting because the pre stim data seen during testing
-        # might have already been seen during training
+            n_fold = 1
+            for train_rd, test_rd in cv.split(Xrd1, yrd1):
+                print(f"##############  Starting {cond} fold")
+                print('Lens of train and test are :',len(train_rd), len(test_rd) )
+                
+                # Let's check for potential overfitting because the pre stim data seen during testing
+                # might have already been seen during training
 
-        train_data_nonstacked = Xrd1[train_rd, -1, first_cut_sample:last_cut_sample] 
-        train_data = np.hstack(train_data_nonstacked)
-        test_data = Xreord[test_rd, -1, :]
-        original_cond_train_data = np.hstack(X[train_rd, -1, first_cut_sample:last_cut_sample])
-        original_cond_test_data = X[test_rd, -1, :]
-        control_data = Xrd1.copy()[:, -1, :]
-        Xrd1_test_control = Xrd1[test_rd, -1]
+                train_data_nonstacked = Xrd1[train_rd, -1, training_window[0]:training_window[1]] 
+                train_data = np.hstack(train_data_nonstacked)
+                test_data = Xreord[test_rd, -1, testing_window[0]:testing_window[1]]
 
+                matches = np.isin(test_data, train_data)
 
-        # This should be 0 for all conditions. It MUST be 0 for poststim!
-        prestim_testdata = np.hstack(test_data[:, prestim_first_cut_sample:prestim_last_cut_sample])
-        poststim_testdata = np.hstack(test_data[:, first_cut_sample:last_cut_sample])
+                # This should also be zero but is a benchmark
+            
+                dict_for_df = {
+                    'cv': cv_label,
+                    'testing_window': testing_window_label,
+                    'condition': cond,
+                    'fold': n_fold,
+                    'n_test_epochs': len(test_rd),
+                    'matches': matches,
+                    'matching_trials': np.sum(np.any(matches, axis=1))
+                }
 
-        # This should be very high for all conditions prestim and poststim. This is the original random data
-        prestim_control = np.hstack(control_data[:, prestim_first_cut_sample:prestim_last_cut_sample])
-        poststim_control = np.hstack(control_data[:, first_cut_sample:last_cut_sample])
+                print(dict_for_df)
 
-        # This should be zero for all non random conditions. It should be > 0 for random
-        prestim_orig_testdata = np.hstack(original_cond_test_data[:, prestim_first_cut_sample:prestim_last_cut_sample])
-        poststim_orig_testdata = np.hstack(original_cond_test_data[:, first_cut_sample:last_cut_sample])
+                list_for_df.append(dict_for_df)
 
-        # This should be zero
-        prestim_xrd1 = np.hstack(Xrd1_test_control[:, prestim_first_cut_sample:prestim_last_cut_sample])
-        poststim_xrd1 = np.hstack(Xrd1_test_control[:, first_cut_sample:last_cut_sample])
-
-        # This should also be zero but is a benchmark
-    
-        dict_for_df = {
-            'condition': cond,
-            'fold': n_fold,
-            'n_test_epochs': len(test_rd),
-            'prestim_matches_samples_raw': np.isin(prestim_testdata, train_data),
-            'poststim_matches_samples_raw': np.isin(poststim_testdata, train_data),
-            'prestim_control_matches_samples_raw': np.isin(prestim_control, train_data),
-            'poststim_control_matches_samples_raw': np.isin(poststim_control, train_data),
-            'prestim_orig_matches_samples_raw': np.isin(prestim_orig_testdata, train_data),
-            'poststim_orig_matches_samples_raw': np.isin(poststim_orig_testdata, train_data),
-            'prestim_xrd1_matches_samples_raw': np.isin(prestim_xrd1, train_data),
-            'poststim_xrd1_matches_samples_raw': np.isin(poststim_xrd1, train_data),
-            'prestim_orig_traintest_matches_samples_raw': np.isin(prestim_orig_testdata, original_cond_train_data),
-            'poststim_orig_traintest_matches_samples_raw': np.isin(poststim_orig_testdata, original_cond_train_data),
-            'data': {
-                'train_data': train_data,
-                'original_cond_train_data': original_cond_train_data,
-                'prestim_testdata': prestim_testdata,
-                'poststim_testdata': poststim_testdata,
-                'prestim_control': prestim_control,
-                'poststim_control': poststim_control,
-                'prestim_orig_testdata': prestim_orig_testdata,
-                'poststim_orig_testdata': poststim_orig_testdata,
-                'prestim_xrd1': prestim_xrd1,
-                'poststim_xrd1': poststim_xrd1,
-                'train_rd': train_rd,
-                'test_rd': test_rd,
-                'X': X[:, -1, :],
-                'Xreord': Xreord[:, -1, :],
-                'Xrd1': Xrd1[:, -1, :]
-            }
-        }
-
-        for key, val in dict_for_df.items():
-            if 'matches' in key:
-                print(f'{key} = {np.sum(val)}')
-
-        list_for_df.append(dict_for_df)
-
-        n_fold += 1
+                n_fold += 1
 
         
 
 # %% analyize
 df = pd.DataFrame(list_for_df)
 
-data_columns = [x[:-4] for x in df.columns if 'matches' in x]
+data_columns = ['matching_trials']
 
-for cur_col in data_columns:
-    df[f'{cur_col}_sum'] = df[f'{cur_col}_raw'].apply(lambda x: np.sum(x))
+df_by_condition = df[['condition', 'n_test_epochs', 'testing_window', 'cv'] + data_columns].groupby(['condition', 'testing_window', 'cv']).sum()
+df_by_condition = df_by_condition.reset_index()
+df_by_condition['matching_trials_percent'] = 100 * (df_by_condition['matching_trials'] / df_by_condition['n_test_epochs'])
 
-sum_columns = [f'{x}_sum' for x in data_columns]
-
-df_by_condition = df[['condition', 'n_test_epochs'] + sum_columns].groupby('condition').sum()
-
-#%% let's find out what is wrong here with prestim_orig_traintest_matches_samples_raw
-fold_nr = 1
-condition = 'random'
-row = df.query(f'condition=="{condition}" and fold=={fold_nr}').iloc[0]
-raw_matches = row['prestim_orig_traintest_matches_samples_raw']
-data = row['data']
-train_data = data['original_cond_train_data']
-test_data = data['prestim_orig_testdata']
-test_data_post = data['poststim_orig_testdata']
-
-this_matches = np.isin(test_data, train_data)
-
-assert np.all(this_matches == raw_matches)
-
-matched_sample_numbers = test_data[this_matches]
-#%%
-df_by_condition['prestim_match_ratio'] = df_by_condition['prestim_matches_sum'] / df_by_condition['n_test_epochs']
-df_by_condition['poststim_match_ratio'] = df_by_condition['poststim_matches_sum'] / df_by_condition['n_test_epochs']
-df_by_condition['prestim_orig_match_ratio'] = df_by_condition['prestim_orig_matches_sum'] / df_by_condition['n_test_epochs']
-df_by_condition['poststim_orig_match_ratio'] = df_by_condition['poststim_orig_matches_sum'] / df_by_condition['n_test_epochs']
-df_by_condition['prestim_control_match_ratio'] = df_by_condition['prestim_control_matches_sum'] / df_by_condition['n_test_epochs']
-df_by_condition['poststim_control_match_ratio'] = df_by_condition['poststim_control_matches_sum'] / df_by_condition['n_test_epochs']
 # %%
