@@ -21,6 +21,8 @@ bibliography: references.bib
 ## Libraries
 
 ```{r}
+Sys.setenv(RETICULATE_PYTHON = "/home/thht/git/others/sci_other_predictive_activity/.pixi/envs/default/bin/python")
+
 library(expm)
 library(patchwork)    # combine plots
 library(magrittr)     # special pipes
@@ -31,6 +33,7 @@ library(abind)        # combine multi-dimensional arrays
 library(tidyverse)
 
 library(reticulate)
+
 np <- import("numpy")
 os <- import("os")
 mne <- import("mne")
@@ -38,7 +41,7 @@ mne <- import("mne")
 theme_set(theme_minimal())
 theme_update(text = element_text(family = "Arial"))
 
-path.root <- "./data/results"
+path.root <- "./data/results_classify/ro_False/KFold"
 list.subj <- list.dirs(path.root, full.names = F, recursive = F)
 n.subj <- length(list.subj)
 
