@@ -294,6 +294,7 @@ class ClassifyJob(Job):
                 y_reord_testing = yreord[test_rd]
                 y_reord_sp_testing = yreord_sp[test_rd]
                 ysp_reord_testing = ysp_reord[test_rd]
+                y_sp_testing = y_sp[test_rd]
 
                 train_data_for_match = np.hstack(train_data_all[:, -1, training_window[0]:training_window[1]] )
 
