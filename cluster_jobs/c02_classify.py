@@ -310,7 +310,6 @@ class ClassifyJob(Job):
                     Xrd1_testing_for_classifier = Xrd1_testing_for_classifier[~Xrd1_matches]
                     yrd1_testing = yrd1[test_rd][~Xrd1_matches]
                     X_testing_for_classifier = X_testing_for_classifier[~X_matches]
-                    yrd1_testing = yrd1_testing[~Xrd1_matches]
                     y0_testing = y0_testing[~X_matches]
                     y_sp_testing = y_sp_testing[~X_matches]
                     X_reord_testing_for_classifier = X_reord_testing_for_classifier[~X_reord_matches]
