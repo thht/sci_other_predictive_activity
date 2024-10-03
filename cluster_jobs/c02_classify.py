@@ -1,4 +1,4 @@
-from .job import Job
+from plus_slurm import Job
 import os.path as op
 import os
 import numpy as np
@@ -23,8 +23,6 @@ def dadd(d,k,v):
 
 
 class ClassifyJob(Job):
-    job_data_folder = '02_classify'
-
     def run(self, subject_id: str, fold_fun: str, remove_overlap: bool):
         path_data = 'data_synced/upstream'
 
