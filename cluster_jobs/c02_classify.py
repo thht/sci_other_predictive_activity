@@ -278,7 +278,7 @@ class ClassifyJob(Job):
                 train_data_all = Xrd1[train_rd]
                 train_data_for_classifier = train_data_all[:, :-1, :]
                 
-                clf.fit(train_data_for_classifier[train_rd], yrd1[train_rd])  # fit on random
+                clf.fit(train_data_for_classifier, yrd1[train_rd])  # fit on random
                 Xrd1_testing_all = Xrd1[test_rd]
                 Xrd1_testing_for_classifier = Xrd1_testing_all[:, :-1, :]
                 Xrd1_testing_for_match = Xrd1_testing_all[:, -1, :]
