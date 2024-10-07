@@ -3,6 +3,7 @@ import os.path as op
 import os
 import numpy as np
 import pandas as pd
+from pathlib import Path
 import importlib
 from mne.decoding import cross_val_multiscore, SlidingEstimator, GeneralizingEstimator, LinearModel
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -23,6 +24,32 @@ def dadd(d,k,v):
 
 
 class ClassifyJob(Job):
+    def shall_run(self, subject_id: str, fold_fun: str, remove_overlap: bool):
+        path_results = 'data_nogit/results_classify'
+        results_folder = Path(path_results, f'ro_{remove_overlap}', fold_fun, subject_id, 'reorder_random')
+        if not results_folder.exists():
+            return True
+        
+        all_file_names = []
+        for cond in cond2code.values():
+            all_file_names.append('rd_to_rd')
+            all_file_names.append(f'rd_to_{cond}')
+            all_file_names.append(f'rd_to_{cond}_sp')
+            all_file_names.append(f'rd_to_{cond}_reord')
+            all_file_names.append(f'rd_to_{cond}_reord_sp')
+            all_file_names.append(f'rd_to_{cond}_sp_reord')
+            all_file_names.append(f'{cond}_to_{cond}')
+            all_file_names.append(f'{cond}_to_{cond}_reord')
+            all_file_names.append(f'{cond}_reord_to_{cond}')
+            all_file_names.append(f'{cond}_reord_to_{cond}_reord')
+
+        all_file_names = [f'cv_{name}_scores.npy' for name in all_file_names]
+        for cur_file in all_file_names:
+            if not Path(results_folder, cur_file).exists():
+                return True
+            
+        
+
     def run(self, subject_id: str, fold_fun: str, remove_overlap: bool):
         path_data = 'data_synced/upstream'
 

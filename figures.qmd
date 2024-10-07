@@ -41,7 +41,7 @@ mne <- import("mne")
 theme_set(theme_minimal())
 theme_update(text = element_text(family = "Arial"))
 
-path.root <- "./data/results_classify/ro_False/KFold"
+path.root <- "./data/results_classify/ro_False/StratifiedKFold"
 list.subj <- list.dirs(path.root, full.names = F, recursive = F)
 n.subj <- length(list.subj)
 

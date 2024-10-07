@@ -26,3 +26,5 @@ data_synced
 data_nogit
 SCRATCH
 jobs
+figures_cache
+.vscode
