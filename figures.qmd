@@ -21,7 +21,7 @@ bibliography: references.bib
 ## Libraries
 
 ```{r}
-Sys.setenv(RETICULATE_PYTHON = "/home/thht/git/others/sci_other_predictive_activity/.pixi/envs/default/bin/python")
+#Sys.setenv(RETICULATE_PYTHON = "/home/thht/git/others/sci_other_predictive_activity/.pixi/envs/default/bin/python")
 
 library(expm)
 library(patchwork)    # combine plots
@@ -41,7 +41,7 @@ mne <- import("mne")
 theme_set(theme_minimal())
 theme_update(text = element_text(family = "Arial"))
 
-path.root <- "./data/results_classify/ro_False/StratifiedKFold"
+path.root <- "./data_nogit/results_classify/ro_False/StratifiedKFold"
 list.subj <- list.dirs(path.root, full.names = F, recursive = F)
 n.subj <- length(list.subj)
 
@@ -555,6 +555,7 @@ df.plot.0.corr
 
 ```{r}
 #| cache: true
+#| eval: false
 
 tic()
 
@@ -615,6 +616,7 @@ toc() # ~ 1min
 ### Append original data & calculate diff
 
 ```{r}
+#| eval: false
 
 df.maths.all <- 
 # --- aggregate original, theoretical and difference between the 2
@@ -639,6 +641,7 @@ df.maths.all <-
 
 ```{r}
 #| cache: true
+#| eval: false
 
 tic()
 
@@ -690,6 +693,7 @@ toc() # ~ 20s
 
 ```{r}
 #| cache: true
+#| eval: false
 
 tic()
 df.clusters.maths <- df.maths.all %>% 
@@ -712,6 +716,7 @@ ggplot(aes(x = t_test, y = t_train, fill = signif)) +
 
 ```{r}
 #| cache: true
+#| eval: false
 
 tic()
 df.clusters.corr.maths <- df.corr.maths.subj %>% 
@@ -1556,6 +1561,7 @@ if (save) {
 ## Supplementary Figure 2
 
 ```{r, fig.width = 6, fig.height = 2.3}
+#| eval: false
 
 mat.C.all <- array(dim = c(34,34,4,4,n.subj))
 i <- 1

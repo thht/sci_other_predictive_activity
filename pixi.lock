@@ -422,6 +422,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-fs-1.6.4-r43ha18555a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-gargle-1.5.2-r43h785f33e_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-generics-0.1.3-r43hc72bb7e_3.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-ggh4x-0.2.8-r43hc72bb7e_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-ggplot2-3.5.1-r43hc72bb7e_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-glue-1.8.0-r43h2b5f3a1_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-googledrive-2.1.1-r43hc72bb7e_2.conda
@@ -1035,6 +1036,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/r-fs-1.6.4-r43h25d921d_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-gargle-1.5.2-r43h785f33e_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-generics-0.1.3-r43hc72bb7e_3.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-ggh4x-0.2.8-r43hc72bb7e_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-ggplot2-3.5.1-r43hc72bb7e_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/r-glue-1.8.0-r43h199b6f9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-googledrive-2.1.1-r43hc72bb7e_2.conda
@@ -12938,6 +12940,29 @@ packages:
   license_family: MIT
   size: 85821
   timestamp: 1719745593462
+- kind: conda
+  name: r-ggh4x
+  version: 0.2.8
+  build: r43hc72bb7e_1
+  build_number: 1
+  subdir: noarch
+  noarch: generic
+  url: https://conda.anaconda.org/conda-forge/noarch/r-ggh4x-0.2.8-r43hc72bb7e_1.conda
+  sha256: c476de8a33c9ed3271cc9bbc1fedcddf3f7548a54570d375f352d0d7e9ebfe0b
+  md5: d04c10d7027db72c8aeb7bf341b1194f
+  depends:
+  - r-base >=4.3,<4.4.0a0
+  - r-cli
+  - r-ggplot2 >=3.4.2
+  - r-gtable
+  - r-lifecycle
+  - r-rlang >=1.1.0
+  - r-scales
+  - r-vctrs >=0.5.0
+  license: MIT
+  license_family: MIT
+  size: 2012204
+  timestamp: 1721329505260
 - kind: conda
   name: r-ggplot2
   version: 3.5.1
