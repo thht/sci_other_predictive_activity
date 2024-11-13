@@ -10,3 +10,9 @@ host = "obob-bomber-aweise.hpc.sbg.ac.at"
 user = "b1019547"
 remote_folder = "/mnt/obob/staff/gdemarchi/data/markov/raw/nosss/downsampled"
 port = 22
+
+[[RClone]]
+name = "gp_data"
+globs = ["*.mat", "*.fif"]
+remote = "local"
+remote_folder = "/home/gdemarchi/Work/Data/markov_revenge/cleaned_orig"
